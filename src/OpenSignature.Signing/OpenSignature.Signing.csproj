@@ -1,6 +1,11 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
   <ItemGroup>
+    <PackageReference Include="Microsoft.Extensions.DependencyInjection.Abstractions" />
+    <PackageReference Include="Microsoft.Extensions.Options" />
+  </ItemGroup>
+
+  <ItemGroup>
     <ProjectReference Include="..\OpenSignature.Signing.Contracts\OpenSignature.Signing.Contracts.csproj" />
     <ProjectReference Include="..\OpenSignature.Domain\OpenSignature.Domain.csproj" />
   </ItemGroup>
