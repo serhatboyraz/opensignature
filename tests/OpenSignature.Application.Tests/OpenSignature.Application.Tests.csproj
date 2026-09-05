@@ -17,6 +17,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\..\src\OpenSignature.Application\OpenSignature.Application.csproj" />
+    <ProjectReference Include="..\..\src\OpenSignature.Domain\OpenSignature.Domain.csproj" />
   </ItemGroup>
 
 </Project>
