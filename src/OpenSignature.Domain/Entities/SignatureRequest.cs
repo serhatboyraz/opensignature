@@ -100,7 +100,8 @@ public sealed class SignatureRequest
         string createdBy,
         Guid? certificateId = null,
         string? idempotencyKey = null,
-        DateTimeOffset? createdAt = null)
+        DateTimeOffset? createdAt = null,
+        Guid? id = null)
     {
         ArgumentNullException.ThrowIfNull(tenantId);
         ArgumentNullException.ThrowIfNull(correlationId);
@@ -108,6 +109,11 @@ public sealed class SignatureRequest
         if (inputFileId == Guid.Empty)
         {
             throw new ArgumentException("Input file ID must not be empty.", nameof(inputFileId));
+        }
+
+        if (id is Guid providedId && providedId == Guid.Empty)
+        {
+            throw new ArgumentException("Signature request ID must not be empty when provided.", nameof(id));
         }
 
         if (string.IsNullOrWhiteSpace(createdBy))
@@ -127,7 +133,7 @@ public sealed class SignatureRequest
         }
 
         return new SignatureRequest(
-            id: Guid.CreateVersion7(),
+            id: id ?? Guid.CreateVersion7(),
             tenantId: tenantId,
             correlationId: correlationId,
             status: SignatureStatus.Created,

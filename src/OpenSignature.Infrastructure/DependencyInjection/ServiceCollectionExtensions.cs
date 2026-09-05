@@ -2,9 +2,12 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using OpenSignature.Application.Abstractions.Messaging;
 using OpenSignature.Application.Abstractions.Persistence;
+using OpenSignature.Application.Abstractions.Signatures;
 using OpenSignature.Application.Abstractions.Storage;
+using OpenSignature.Application.Signatures;
 using OpenSignature.Infrastructure.Messaging;
 using OpenSignature.Infrastructure.Persistence;
+using OpenSignature.Infrastructure.Signatures;
 using OpenSignature.Infrastructure.Storage;
 
 namespace OpenSignature.Infrastructure;
@@ -29,6 +32,38 @@ public static class ServiceCollectionExtensions
             options.UseNpgsql(connectionString));
 
         services.AddScoped<ISignatureRequestIdempotencyStore, EfSignatureRequestIdempotencyStore>();
+
+        return services;
+    }
+
+    /// <summary>
+    /// Registers <see cref="ISignatureRequestService"/> (requires persistence, storage, and outbox writer).
+    /// </summary>
+    public static IServiceCollection AddSignatureRequestService(this IServiceCollection services)
+    {
+        ArgumentNullException.ThrowIfNull(services);
+
+        services.AddScoped<ISignatureRequestService, EfSignatureRequestService>();
+        return services;
+    }
+
+    /// <summary>
+    /// Binds <see cref="SignatureApiOptions"/> from configuration.
+    /// </summary>
+    public static IServiceCollection AddSignatureApiOptions(
+        this IServiceCollection services,
+        Action<SignatureApiOptions>? configure = null)
+    {
+        ArgumentNullException.ThrowIfNull(services);
+
+        if (configure is not null)
+        {
+            services.Configure(configure);
+        }
+        else
+        {
+            services.Configure<SignatureApiOptions>(_ => { });
+        }
 
         return services;
     }

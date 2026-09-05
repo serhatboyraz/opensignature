@@ -14,4 +14,5 @@ public sealed record SigningJobMessage(
     SignatureProfile RequestedProfile,
     DateTimeOffset CreatedAt,
     int Attempt,
-    string? CorrelationId = null);
+    string? CorrelationId = null,
+    string? CertificateThumbprint = null);

@@ -48,7 +48,8 @@ public sealed class StoredFile
         string contentType,
         long size,
         Sha256Hash sha256,
-        DateTimeOffset? createdAt = null)
+        DateTimeOffset? createdAt = null,
+        Guid? id = null)
     {
         ArgumentNullException.ThrowIfNull(storageKey);
         ArgumentNullException.ThrowIfNull(sha256);
@@ -68,8 +69,13 @@ public sealed class StoredFile
             throw new ArgumentOutOfRangeException(nameof(size), size, "File size must not be negative.");
         }
 
+        if (id is Guid providedId && providedId == Guid.Empty)
+        {
+            throw new ArgumentException("Stored file ID must not be empty when provided.", nameof(id));
+        }
+
         return new StoredFile(
-            id: Guid.CreateVersion7(),
+            id: id ?? Guid.CreateVersion7(),
             storageKey: storageKey,
             originalFileName: originalFileName.Trim(),
             contentType: contentType.Trim(),

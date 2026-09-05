@@ -1,5 +1,9 @@
 <Project Sdk="Microsoft.NET.Sdk.Web">
 
+  <PropertyGroup>
+    <UserSecretsId>opensignature-api-dev</UserSecretsId>
+  </PropertyGroup>
+
   <ItemGroup>
     <PackageReference Include="Microsoft.AspNetCore.OpenApi" />
     <PackageReference Include="Microsoft.OpenApi" />
@@ -8,6 +12,7 @@
   <ItemGroup>
     <ProjectReference Include="..\OpenSignature.Application\OpenSignature.Application.csproj" />
     <ProjectReference Include="..\OpenSignature.Infrastructure\OpenSignature.Infrastructure.csproj" />
+    <ProjectReference Include="..\OpenSignature.Signing\OpenSignature.Signing.csproj" />
   </ItemGroup>
 
 </Project>

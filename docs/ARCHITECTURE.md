@@ -135,6 +135,8 @@ Provider capabilities: list certificates, metadata, create digest, sign digest, 
 
 **Provider selection:** `ISigningProviderResolver` / `SigningProviderSelector` resolves a registered `ISigningProvider` by `SigningProviderType` and optional provider id from the request/configuration. Providers are registered in DI as `IEnumerable<ISigningProvider>` (e.g. `AddPfxSigningProvider`). Unsupported or ambiguous selections throw `UnsupportedSigningProviderException` (`SIGNING_PROVIDER_UNSUPPORTED`).
 
+**Signature engine (T050–T054):** `AddSignatureEngine` registers PFX + CAdES/XAdES/PAdES Baseline B format signers + `SignatureOrchestrator` as `ISignatureCreationService`. Crypto primitives live under `OpenSignature.Signing.Crypto`. Format signers never export private keys; digests are signed via `ISigningProvider.SignDigestAsync`. Unsupported profiles/formats throw `SIGNATURE_PROFILE_UNSUPPORTED` / `SIGNATURE_FORMAT_UNSUPPORTED` (no silent downgrade). See `docs/SIGNATURE-PROFILES.md`.
+
 **Hardware rule:** for PKCS#11, smart card, and HSM providers, private keys never leave the device. Prefer:
 
 ```text
