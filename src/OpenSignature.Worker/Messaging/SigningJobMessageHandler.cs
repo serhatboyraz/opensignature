@@ -6,7 +6,7 @@ using OpenSignature.Application.Messages;
 namespace OpenSignature.Worker.Messaging;
 
 /// <summary>
-/// Deserializes queue payloads and invokes <see cref="ISigningJobProcessor"/>.
+/// Deserializes queue payloads and invokes a scoped <see cref="ISigningJobProcessor"/>.
 /// Does not log document contents — only job metadata identifiers.
 /// </summary>
 public sealed class SigningJobMessageHandler
@@ -19,14 +19,14 @@ public sealed class SigningJobMessageHandler
         Converters = { new JsonStringEnumConverter(JsonNamingPolicy.CamelCase) }
     };
 
-    private readonly ISigningJobProcessor _processor;
+    private readonly IServiceScopeFactory _scopeFactory;
     private readonly ILogger<SigningJobMessageHandler> _logger;
 
     public SigningJobMessageHandler(
-        ISigningJobProcessor processor,
+        IServiceScopeFactory scopeFactory,
         ILogger<SigningJobMessageHandler> logger)
     {
-        _processor = processor ?? throw new ArgumentNullException(nameof(processor));
+        _scopeFactory = scopeFactory ?? throw new ArgumentNullException(nameof(scopeFactory));
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
     }
 
@@ -64,7 +64,9 @@ public sealed class SigningJobMessageHandler
                 message.Attempt,
                 message.CorrelationId);
 
-            await _processor.ProcessAsync(message, cancellationToken).ConfigureAwait(false);
+            await using var scope = _scopeFactory.CreateAsyncScope();
+            var processor = scope.ServiceProvider.GetRequiredService<ISigningJobProcessor>();
+            await processor.ProcessAsync(message, cancellationToken).ConfigureAwait(false);
 
             _logger.LogInformation(
                 "Completed handling signing job {JobId} for signature {SignatureId}",

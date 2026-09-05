@@ -1,5 +1,6 @@
 using System.Text;
 using System.Text.Json;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging.Abstractions;
 using OpenSignature.Application.Abstractions.Messaging;
 using OpenSignature.Application.Messages;
@@ -27,9 +28,13 @@ public sealed class SigningJobMessageHandlerTests
         var json = JsonSerializer.Serialize(expected, SigningJobMessageHandler.JsonOptions);
         Assert.DoesNotContain("document", json, StringComparison.OrdinalIgnoreCase);
 
+        var services = new ServiceCollection();
         var processor = new RecordingSigningJobProcessor();
+        services.AddSingleton<ISigningJobProcessor>(processor);
+        await using var provider = services.BuildServiceProvider();
+
         var handler = new SigningJobMessageHandler(
-            processor,
+            provider.GetRequiredService<IServiceScopeFactory>(),
             NullLogger<SigningJobMessageHandler>.Instance);
 
         await handler.HandleAsync(Encoding.UTF8.GetBytes(json));
@@ -42,9 +47,13 @@ public sealed class SigningJobMessageHandlerTests
     [Fact]
     public async Task HandleAsync_rejects_invalid_json()
     {
+        var services = new ServiceCollection();
         var processor = new RecordingSigningJobProcessor();
+        services.AddSingleton<ISigningJobProcessor>(processor);
+        await using var provider = services.BuildServiceProvider();
+
         var handler = new SigningJobMessageHandler(
-            processor,
+            provider.GetRequiredService<IServiceScopeFactory>(),
             NullLogger<SigningJobMessageHandler>.Instance);
 
         await Assert.ThrowsAsync<JsonException>(() =>

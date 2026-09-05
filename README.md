@@ -8,84 +8,81 @@ Independent .NET digital-signature platform with asynchronous signing, PostgreSQ
 - [Product specification (TR)](docs/PRODUCT-SPEC.tr.md)
 - [Task checklist](docs/TASKS.md)
 - [Architecture](docs/ARCHITECTURE.md)
+- [Signature profiles](docs/SIGNATURE-PROFILES.md)
 
 All source code, identifiers, logs, tests and commit messages are English-only.
-
-## Repository layout
-
-```text
-src/
-  OpenSignature.Api/                 ASP.NET Core Minimal API
-  OpenSignature.Application/         Application use cases and ports
-  OpenSignature.Domain/              Domain model
-  OpenSignature.Infrastructure/      Persistence, messaging, storage
-  OpenSignature.Signing/             Signature format implementations
-  OpenSignature.Signing.Contracts/   Provider contracts
-  OpenSignature.Worker/              RabbitMQ signing worker
-  OpenSignature.Web/                 React (Vite + TypeScript) UI
-tests/                       Unit, integration and interop tests
-docs/                        Product and engineering docs
-deploy/                      Deployment assets
-samples/                     Sample inputs and certificates (no private keys)
-```
 
 ## Prerequisites
 
 - .NET 10 SDK
 - Node.js 20+
-- Docker (for local PostgreSQL / RabbitMQ)
+- Docker (PostgreSQL + RabbitMQ)
 
 ## Local infrastructure
 
-Start PostgreSQL and RabbitMQ with one command from the repository root:
-
 ```bash
-cp .env.example .env   # once; adjust credentials if needed
+cp .env.example .env
 docker compose up -d
-```
-
-Check service health:
-
-```bash
 docker compose ps
 ```
 
-| Service   | Host      | Port(s)        | Default credentials                          |
-|-----------|-----------|----------------|----------------------------------------------|
-| PostgreSQL | `localhost` | `5432`       | user/password/db: `esign` / `esign` / `opensignature` |
-| RabbitMQ  | `localhost` | `5672` (AMQP), `15672` (management UI) | user/password: `esign` / `esign` |
+Defaults: Postgres `localhost:5432` (`esign`/`esign`/`opensignature`), RabbitMQ `5672` + management UI `15672`. If host port `5432` is busy, set `POSTGRES_PORT=5433` in `.env` and match `ConnectionStrings:PostgreSQL` in the Api/Worker Development settings.
 
-Connection hints (defaults from `.env.example`):
-
-- PostgreSQL: `Host=localhost;Port=5432;Database=opensignature;Username=esign;Password=esign`
-- RabbitMQ AMQP: `amqp://esign:esign@localhost:5672/`
-- RabbitMQ management UI: http://localhost:15672
-
-Stop infrastructure:
+## Working POC (async signing)
 
 ```bash
-docker compose down
-```
+# 1) Dependencies
+docker compose up -d
 
-## Quick start
+# 2) Dev signing certificate (gitignored under data/certs/)
+pwsh ./scripts/Generate-DevCertificate.ps1
+$env:Signing__Pfx__Password = "opensignature-dev"
 
-### Backend
-
-```bash
-dotnet restore OpenSignature.slnx
+# 3) Build and run (two terminals)
 dotnet build OpenSignature.slnx
-dotnet test OpenSignature.slnx
-dotnet run --project src/OpenSignature.Api
+dotnet run --project src/OpenSignature.Api --launch-profile http
+dotnet run --project src/OpenSignature.Worker
 ```
 
-### Frontend
+API: http://localhost:5270
+
+Create a Baseline-B signature (CAdES example):
 
 ```bash
-cd src/OpenSignature.Web
-npm install
-npm run dev
+curl -s -X POST "http://localhost:5270/api/v1/signatures" \
+  -H "X-Tenant-Id: tenant-demo" \
+  -H "Idempotency-Key: demo-1" \
+  -F "file=@samples/poc.txt;type=text/plain" \
+  -F "format=CAdES" \
+  -F "profile=B" \
+  -F "signingProvider=Pfx"
+```
+
+Poll status, then download when `Completed`:
+
+```bash
+curl -s "http://localhost:5270/api/v1/signatures/{id}" -H "X-Tenant-Id: tenant-demo"
+curl -s -o signed.bin "http://localhost:5270/api/v1/signatures/{id}/content" -H "X-Tenant-Id: tenant-demo"
+```
+
+Supported MVP formats: **CAdES-B**, **XAdES-B**, **PAdES-B** via the development PFX provider. Sample inputs live under `samples/`.
+
+## Tests
+
+```bash
+dotnet test OpenSignature.slnx
+```
+
+## Repository layout
+
+```text
+src/OpenSignature.Api|Application|Domain|Infrastructure|Signing|Signing.Contracts|Worker|Web
+tests/
+docs/
+scripts/Generate-DevCertificate.ps1
+samples/
 ```
 
 ## Status
 
-Implementation follows `docs/TASKS.md` in dependency order. Local infrastructure (T003) is available via `docker compose up -d`.
+POC path is operational: API → storage → PostgreSQL → outbox → RabbitMQ → worker → signing engine → download. Further tasks (advanced profiles, ASiC, hardware providers, React UI, auth) continue via `docs/TASKS.md`.

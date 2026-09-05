@@ -17,7 +17,7 @@ public sealed class BootstrapTests
     }
 
     [Fact]
-    public void Host_registers_consumer_retry_dispatcher_and_noop_processor()
+    public void Host_registers_consumer_retry_dispatcher_and_processor()
     {
         var builder = Host.CreateApplicationBuilder([]);
         builder.Services.Configure<RabbitMqOptions>(options =>
