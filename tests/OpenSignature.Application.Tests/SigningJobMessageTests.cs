@@ -30,7 +30,11 @@ public sealed class SigningJobMessageTests
         Assert.Equal("direct", SigningQueueTopology.ExchangeType);
         Assert.Equal("signature.created", SigningQueueTopology.RoutingKey);
         Assert.Equal("esign.signature.worker", SigningQueueTopology.WorkerQueue);
+        Assert.Equal("esign.signature.dlx", SigningQueueTopology.DeadLetterExchange);
+        Assert.Equal("fanout", SigningQueueTopology.DeadLetterExchangeType);
         Assert.Equal("esign.signature.dlq", SigningQueueTopology.DeadLetterQueue);
+        Assert.Equal("signature.dead", SigningQueueTopology.DeadLetterRoutingKey);
+        Assert.Equal("x-attempt", SigningQueueTopology.AttemptHeaderName);
         Assert.Equal("signature.created", SigningQueueTopology.SignatureCreatedMessageType);
         Assert.Equal(SigningQueueTopology.RoutingKey, SigningQueueTopology.SignatureCreatedMessageType);
     }

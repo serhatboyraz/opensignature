@@ -54,7 +54,14 @@ For signing failures:
 1. inspect correlation ID
 2. inspect signature/job ID
 3. inspect provider health
-4. inspect queue state
+4. inspect queue state (`esign.signature.worker` and `esign.signature.dlq`)
 5. inspect storage
 6. inspect cryptographic error code
 7. retry only if the failure is classified transient.
+
+Worker retry defaults (`SigningJobRetry`):
+
+- `MaxAttempts`: 5
+- exponential backoff from `InitialBackoffMilliseconds` (1s) with multiplier 2, capped by `MaxBackoffMilliseconds` (60s)
+- permanent failures (bad payload, cryptographic errors) go to the DLQ without further retry
+- DLQ messages include `x-attempt`, `x-failure-kind`, and `x-failure-reason` headers

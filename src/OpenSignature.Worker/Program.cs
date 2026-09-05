@@ -1,4 +1,5 @@
 using OpenSignature.Application.Abstractions.Messaging;
+using OpenSignature.Application.Messaging;
 using OpenSignature.Infrastructure.Messaging;
 using OpenSignature.Worker.Messaging;
 
@@ -6,9 +7,13 @@ var builder = Host.CreateApplicationBuilder(args);
 
 builder.Services.Configure<RabbitMqOptions>(
     builder.Configuration.GetSection(RabbitMqOptions.SectionName));
+builder.Services.Configure<SigningJobRetryOptions>(
+    builder.Configuration.GetSection(SigningJobRetryOptions.SectionName));
 
+builder.Services.AddSingleton(TimeProvider.System);
 builder.Services.AddSingleton<ISigningJobProcessor, NoOpSigningJobProcessor>();
 builder.Services.AddSingleton<SigningJobMessageHandler>();
+builder.Services.AddSingleton<SigningJobFailureDispatcher>();
 builder.Services.AddHostedService<SigningJobConsumer>();
 
 var host = builder.Build();

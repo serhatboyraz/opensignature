@@ -8,21 +8,24 @@ namespace OpenSignature.Worker.Messaging;
 
 /// <summary>
 /// RabbitMQ consumer hosted service for signing jobs.
-/// ACKs only after successful handling; full retry/DLQ policy is deferred.
+/// ACKs on success; applies bounded retry with exponential backoff or DLQ on failure.
 /// </summary>
 public sealed class SigningJobConsumer : BackgroundService
 {
     private readonly IOptions<RabbitMqOptions> _options;
     private readonly SigningJobMessageHandler _handler;
+    private readonly SigningJobFailureDispatcher _failureDispatcher;
     private readonly ILogger<SigningJobConsumer> _logger;
 
     public SigningJobConsumer(
         IOptions<RabbitMqOptions> options,
         SigningJobMessageHandler handler,
+        SigningJobFailureDispatcher failureDispatcher,
         ILogger<SigningJobConsumer> logger)
     {
         _options = options ?? throw new ArgumentNullException(nameof(options));
         _handler = handler ?? throw new ArgumentNullException(nameof(handler));
+        _failureDispatcher = failureDispatcher ?? throw new ArgumentNullException(nameof(failureDispatcher));
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
     }
 
@@ -59,10 +62,11 @@ public sealed class SigningJobConsumer : BackgroundService
             .ConfigureAwait(false);
 
         _logger.LogInformation(
-            "OpenSignature signing worker consuming queue {Queue} bound to {Exchange}/{RoutingKey}",
+            "OpenSignature signing worker consuming queue {Queue} bound to {Exchange}/{RoutingKey} (DLQ {DeadLetterQueue})",
             SigningQueueTopology.WorkerQueue,
             SigningQueueTopology.Exchange,
-            SigningQueueTopology.RoutingKey);
+            SigningQueueTopology.RoutingKey,
+            SigningQueueTopology.DeadLetterQueue);
 
         try
         {
@@ -85,6 +89,8 @@ public sealed class SigningJobConsumer : BackgroundService
             return;
         }
 
+        var attempt = SigningJobFailureDispatcher.ResolveAttempt(eventArgs, eventArgs.Body.Span);
+
         try
         {
             await _handler.HandleAsync(eventArgs.Body, stoppingToken).ConfigureAwait(false);
@@ -101,22 +107,44 @@ public sealed class SigningJobConsumer : BackgroundService
         {
             _logger.LogError(
                 ex,
-                "Signing job handling failed (deliveryTag {DeliveryTag}); message will not be ACKed",
+                "Signing job handling failed on attempt {Attempt} (deliveryTag {DeliveryTag})",
+                attempt,
                 eventArgs.DeliveryTag);
 
             try
             {
-                // Basic nack without requeue keeps the consume loop alive; retry/DLQ policy arrives in T034.
-                await channel.BasicNackAsync(
-                        eventArgs.DeliveryTag,
-                        multiple: false,
-                        requeue: false,
-                        cancellationToken: CancellationToken.None)
+                var plan = _failureDispatcher.CreatePlan(ex, attempt);
+                await _failureDispatcher
+                    .DispatchAsync(channel, eventArgs, plan, stoppingToken)
                     .ConfigureAwait(false);
             }
-            catch (Exception nackEx)
+            catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
             {
-                _logger.LogError(nackEx, "Failed to NACK deliveryTag {DeliveryTag}", eventArgs.DeliveryTag);
+                _logger.LogInformation(
+                    "Signing job failure disposition cancelled during shutdown (deliveryTag {DeliveryTag})",
+                    eventArgs.DeliveryTag);
+            }
+            catch (Exception dispositionEx)
+            {
+                _logger.LogError(
+                    dispositionEx,
+                    "Failed to apply retry/DLQ disposition for deliveryTag {DeliveryTag}; NACKing without requeue",
+                    eventArgs.DeliveryTag);
+
+                try
+                {
+                    // Broker DLX on the worker queue routes rejected messages to the DLQ.
+                    await channel.BasicNackAsync(
+                            eventArgs.DeliveryTag,
+                            multiple: false,
+                            requeue: false,
+                            cancellationToken: CancellationToken.None)
+                        .ConfigureAwait(false);
+                }
+                catch (Exception nackEx)
+                {
+                    _logger.LogError(nackEx, "Failed to NACK deliveryTag {DeliveryTag}", eventArgs.DeliveryTag);
+                }
             }
         }
     }
