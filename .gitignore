@@ -47,7 +47,7 @@ Thumbs.db
 
 ## Local storage / runtime data
 data/
-storage/
+/storage/
 tmp/
 temp/
 logs/
