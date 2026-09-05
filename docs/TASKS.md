@@ -84,7 +84,7 @@
 ## Phase 1 — Domain and Persistence
 
 ### T010 — Domain Model
-- Status: `IN_PROGRESS`
+- Status: `DONE`
 - Priority: P0
 - Depends on: T001
 - Scope:
@@ -103,7 +103,7 @@
   - `feat(domain): add signature domain model`
 
 ### T011 — Signature State Machine
-- Status: `TODO`
+- Status: `IN_PROGRESS`
 - Priority: P0
 - Depends on: T010
 - Acceptance:
@@ -147,7 +147,7 @@
 ## Phase 2 — File Storage
 
 ### T020 — Storage Abstraction
-- Status: `TODO`
+- Status: `IN_PROGRESS`
 - Priority: P0
 - Depends on: T010
 - Scope:
@@ -178,7 +178,7 @@
 ## Phase 3 — Messaging
 
 ### T030 — RabbitMQ Contracts
-- Status: `TODO`
+- Status: `IN_PROGRESS`
 - Priority: P0
 - Depends on: T010
 - Scope:
@@ -239,7 +239,7 @@
 ## Phase 4 — Signing Provider Abstraction
 
 ### T040 — Signing Provider Contract
-- Status: `TODO`
+- Status: `IN_PROGRESS`
 - Priority: P0
 - Depends on: T010
 - Scope:
@@ -676,7 +676,7 @@
 ## Phase 15 — Documentation
 
 ### T150 — Architecture Documentation
-- Status: `IN_PROGRESS`
+- Status: `DONE`
 - Priority: P0
 - Depends on: T001
 - Deliverable:
@@ -721,7 +721,7 @@
   - `docs(signing): document signature profile matrix`
 
 ### T155 — Test Strategy
-- Status: `IN_PROGRESS`
+- Status: `DONE`
 - Priority: P0
 - Depends on: T001
 - Deliverable:

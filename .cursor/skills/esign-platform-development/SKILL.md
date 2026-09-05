@@ -61,7 +61,7 @@ For every task:
 ```text
 Understand
 → Inspect
-→ DOpenSignature
+→ Design
 → Implement
 → Test
 → Review
