@@ -1,8 +1,16 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
   <ItemGroup>
+    <PackageReference Include="Microsoft.EntityFrameworkCore" />
+    <PackageReference Include="Microsoft.EntityFrameworkCore.Design">
+      <PrivateAssets>all</PrivateAssets>
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+    </PackageReference>
+    <PackageReference Include="Microsoft.EntityFrameworkCore.Relational" />
     <PackageReference Include="Microsoft.Extensions.DependencyInjection.Abstractions" />
     <PackageReference Include="Microsoft.Extensions.Options" />
+    <PackageReference Include="Npgsql.EntityFrameworkCore.PostgreSQL" />
+    <PackageReference Include="RabbitMQ.Client" />
   </ItemGroup>
 
   <ItemGroup>
@@ -11,4 +19,11 @@
     <ProjectReference Include="..\OpenSignature.Signing.Contracts\OpenSignature.Signing.Contracts.csproj" />
   </ItemGroup>
 
+
+  <!-- EF Core migrations are tool-generated with block-scoped namespaces -->
+  <ItemGroup>
+    <Compile Update="Persistence\Migrations\**\*.cs">
+      <NoWarn>$(NoWarn);IDE0005;IDE0161</NoWarn>
+    </Compile>
+  </ItemGroup>
 </Project>

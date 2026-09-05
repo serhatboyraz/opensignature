@@ -115,7 +115,7 @@
   - `feat(domain): enforce signature state transitions`
 
 ### T012 — PostgreSQL Persistence
-- Status: `TODO`
+- Status: `DONE`
 - Priority: P0
 - Depends on: T010
 - Scope:
@@ -189,7 +189,7 @@
   - `feat(queue): define signing job contracts`
 
 ### T031 — RabbitMQ Publisher
-- Status: `TODO`
+- Status: `DONE`
 - Priority: P0
 - Depends on: T030
 - Commit:
@@ -209,7 +209,7 @@
   - `feat(queue): implement transactional outbox`
 
 ### T033 — Worker Skeleton
-- Status: `TODO`
+- Status: `DONE`
 - Priority: P0
 - Depends on: T030
 - Scope:
@@ -251,7 +251,7 @@
   - `feat(signing): add signing provider abstraction`
 
 ### T041 — PFX Provider
-- Status: `TODO`
+- Status: `DONE`
 - Priority: P0
 - Depends on: T040
 - Scope:

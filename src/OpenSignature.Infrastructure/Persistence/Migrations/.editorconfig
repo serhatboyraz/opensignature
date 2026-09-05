@@ -1,0 +1,6 @@
+# EF Core generated migrations use block-scoped namespaces and may include unused usings.
+[*.cs]
+csharp_style_namespace_declarations = block_scoped:silent
+dotnet_diagnostic.IDE0161.severity = none
+dotnet_diagnostic.IDE0005.severity = none
+dotnet_diagnostic.IDE0005.severity = none
