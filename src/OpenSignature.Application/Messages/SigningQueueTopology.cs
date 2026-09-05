@@ -7,6 +7,11 @@ public static class SigningQueueTopology
 {
     public const string Exchange = "esign.signature";
 
+    /// <summary>
+    /// AMQP exchange type for <see cref="Exchange"/> (direct exact routing-key match).
+    /// </summary>
+    public const string ExchangeType = "direct";
+
     public const string RoutingKey = "signature.created";
 
     public const string WorkerQueue = "esign.signature.worker";

@@ -27,6 +27,7 @@ public sealed class SigningJobMessageTests
     public void Topology_matches_specified_names()
     {
         Assert.Equal("esign.signature", SigningQueueTopology.Exchange);
+        Assert.Equal("direct", SigningQueueTopology.ExchangeType);
         Assert.Equal("signature.created", SigningQueueTopology.RoutingKey);
         Assert.Equal("esign.signature.worker", SigningQueueTopology.WorkerQueue);
         Assert.Equal("esign.signature.dlq", SigningQueueTopology.DeadLetterQueue);

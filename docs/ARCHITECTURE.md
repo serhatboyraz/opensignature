@@ -131,6 +131,8 @@ ISigningProvider
 
 Provider capabilities: list certificates, metadata, create digest, sign digest, health/availability, session cleanup.
 
+**PFX (dev/demo):** `PfxSigningProvider` loads PKCS#12 from a configured path or in-memory bytes (`PfxSigningProviderOptions`). Password may come from options (development) or `ISigningSecretProvider` via `PasswordSecretName` (secret-store stub until T113). Certificates without a usable RSA/ECDSA private key, or outside their validity window, are listed with `CanSign=false`. Health reflects load success (`Healthy` / `Degraded` / `Unavailable`). Never commit PFX files or passwords.
+
 **Hardware rule:** for PKCS#11, smart card, and HSM providers, private keys never leave the device. Prefer:
 
 ```text
@@ -155,11 +157,13 @@ MVP: local filesystem. Production adapters: S3-compatible, Azure Blob, S3. Postg
 ## 7. RabbitMQ Topology
 
 ```text
-Exchange:     esign.signature
+Exchange:     esign.signature (durable, direct)
 Routing key:  signature.created
 Queue:        esign.signature.worker
 DLQ:          esign.signature.dlq
 ```
+
+Publisher: `ISigningJobPublisher` / `RabbitMqSigningJobPublisher` publishes JSON metadata only (`SigningJobMessage`) to the exchange.
 
 Messages carry job metadata and storage references only (e.g. `jobId`, `tenantId`, `signatureId`, `inputPath`, format/profile, `attempt`). **No document binaries in messages.**
 
