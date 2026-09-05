@@ -1,5 +1,4 @@
 using System.Text.Json;
-using System.Text.Json.Serialization;
 using Microsoft.Extensions.Options;
 using OpenSignature.Application.Abstractions.Messaging;
 using OpenSignature.Application.Messages;
@@ -12,13 +11,6 @@ namespace OpenSignature.Infrastructure.Messaging;
 /// </summary>
 public sealed class RabbitMqSigningJobPublisher : ISigningJobPublisher, IAsyncDisposable, IDisposable
 {
-    private static readonly JsonSerializerOptions JsonOptions = new()
-    {
-        PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
-        DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull,
-        Converters = { new JsonStringEnumConverter(JsonNamingPolicy.CamelCase) }
-    };
-
     private readonly IConnectionFactory _connectionFactory;
     private readonly SemaphoreSlim _gate = new(1, 1);
 
@@ -41,7 +33,7 @@ public sealed class RabbitMqSigningJobPublisher : ISigningJobPublisher, IAsyncDi
         ObjectDisposedException.ThrowIf(_disposed, this);
         ArgumentNullException.ThrowIfNull(message);
 
-        var body = JsonSerializer.SerializeToUtf8Bytes(message, JsonOptions);
+        var body = JsonSerializer.SerializeToUtf8Bytes(message, SigningJobMessageJson.Options);
 
         var properties = new BasicProperties
         {
