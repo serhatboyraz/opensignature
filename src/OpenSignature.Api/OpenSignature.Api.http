@@ -1,0 +1,6 @@
+@OpenSignature.Api_HostAddress = http://localhost:5270
+
+GET {{OpenSignature.Api_HostAddress}}/health/
+Accept: application/json
+
+###

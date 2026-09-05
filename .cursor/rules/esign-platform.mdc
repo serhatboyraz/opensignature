@@ -1,0 +1,28 @@
+---
+description: OpenSignature platform implementation rules
+alwaysApply: true
+---
+
+# OpenSignature
+
+The product / project name is **OpenSignature**.
+
+- Use `OpenSignature` in user-facing text, README, docs titles, UI branding, and commit/PR titles when referring to the product.
+- Technical assembly/namespace prefixes are `OpenSignature.*` (projects under `src/` and `tests/`).
+- Do not invent alternate product names (e.g. "E-Signature Platform" alone without OpenSignature) in new UI or docs.
+
+Follow `.cursor/skills/esign-platform-development/SKILL.md`.
+
+Use `docs/PRODUCT-SPEC.en.md` and `docs/TASKS.md` as the primary engineering sources of truth.
+
+Implement work task-by-task. Update task status only when tests and acceptance criteria pass.
+
+All code, identifiers, comments, logs, tests and commit messages must be English.
+
+Never commit secrets, private keys, PFX files or credentials.
+
+Do not put document binaries in RabbitMQ messages.
+
+Do not expose or export private keys from HSM/smart-card/PKCS#11 providers.
+
+Use meaningful Conventional Commits after completed tasks.

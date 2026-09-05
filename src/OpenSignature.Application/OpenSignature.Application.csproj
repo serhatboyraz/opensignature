@@ -1,0 +1,8 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <ItemGroup>
+    <ProjectReference Include="..\OpenSignature.Domain\OpenSignature.Domain.csproj" />
+    <ProjectReference Include="..\OpenSignature.Signing.Contracts\OpenSignature.Signing.Contracts.csproj" />
+  </ItemGroup>
+
+</Project>

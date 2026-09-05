@@ -1,0 +1,57 @@
+## .NET
+bin/
+obj/
+*.user
+*.suo
+*.userosscache
+*.sln.docstates
+.vs/
+*.nupkg
+project.lock.json
+artifacts/
+TestResults/
+coverage/
+*.DotSettings.user
+
+## Secrets / certificates (never commit)
+*.pfx
+*.p12
+*.pem
+*.key
+*.crt
+.env
+.env.*
+!.env.example
+secrets/
+**/appsettings.*.local.json
+
+## Node / React
+node_modules/
+dist/
+*.local
+.npm/
+.vite/
+
+## IDE / OS
+# Keep OpenSignature agent rules/skills in the repo; ignore other Cursor local state
+.cursor/*
+!.cursor/rules/
+!.cursor/rules/**
+!.cursor/skills/
+!.cursor/skills/**
+.idea/
+*.swp
+*~
+.DS_Store
+Thumbs.db
+
+## Local storage / runtime data
+data/
+storage/
+tmp/
+temp/
+logs/
+*.log
+
+## Docker
+docker-compose.override.yml
