@@ -1,11 +1,15 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
   <ItemGroup>
+    <PackageReference Include="BouncyCastle.Cryptography" />
     <PackageReference Include="Microsoft.Extensions.DependencyInjection.Abstractions" />
     <PackageReference Include="Microsoft.Extensions.Options" />
+    <PackageReference Include="System.Security.Cryptography.Pkcs" />
+    <PackageReference Include="System.Security.Cryptography.Xml" />
   </ItemGroup>
 
   <ItemGroup>
+    <ProjectReference Include="..\OpenSignature.Application\OpenSignature.Application.csproj" />
     <ProjectReference Include="..\OpenSignature.Signing.Contracts\OpenSignature.Signing.Contracts.csproj" />
     <ProjectReference Include="..\OpenSignature.Domain\OpenSignature.Domain.csproj" />
   </ItemGroup>

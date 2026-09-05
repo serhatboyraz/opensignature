@@ -282,7 +282,7 @@
 ## Phase 5 — Signature Formats
 
 ### T050 — Cryptographic Primitives
-- Status: `TODO`
+- Status: `DONE`
 - Priority: P0
 - Depends on: T040
 - Scope:
@@ -296,7 +296,7 @@
   - `feat(crypto): add signing primitives`
 
 ### T051 — CAdES-B
-- Status: `TODO`
+- Status: `DONE`
 - Priority: P0
 - Depends on: T050
 - Acceptance:
@@ -309,7 +309,7 @@
   - `feat(signing): add CAdES baseline B`
 
 ### T052 — XAdES-B
-- Status: `TODO`
+- Status: `DONE`
 - Priority: P0
 - Depends on: T050
 - Acceptance:
@@ -323,7 +323,7 @@
   - `feat(signing): add XAdES baseline B`
 
 ### T053 — PAdES-B
-- Status: `TODO`
+- Status: `DONE`
 - Priority: P0
 - Depends on: T050
 - Acceptance:
@@ -339,7 +339,7 @@
   - `feat(signing): add PAdES baseline B`
 
 ### T054 — Signature Service Orchestration
-- Status: `TODO`
+- Status: `DONE`
 - Priority: P0
 - Depends on: T051, T052, T053
 - Scope:
@@ -357,7 +357,7 @@
 ## Phase 6 — API
 
 ### T060 — Signature API
-- Status: `TODO`
+- Status: `DONE`
 - Priority: P0
 - Depends on: T013, T021, T032, T054
 - Scope:
@@ -396,7 +396,7 @@
 ## Phase 7 — Worker End-to-End
 
 ### T070 — End-to-End Signing Pipeline
-- Status: `TODO`
+- Status: `DONE`
 - Priority: P0
 - Depends on: T034, T054, T060
 - Flow:

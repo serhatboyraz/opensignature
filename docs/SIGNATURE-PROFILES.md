@@ -25,3 +25,37 @@ T-level signature plus the validation material required for long-term validation
 LT-level signature plus archival preservation timestamps/evidence as required by the applicable profile.
 
 The implementation must validate actual profile requirements instead of treating these levels as string labels.
+
+OpenSignature **never silently downgrades** a requested profile. Requests for T/LT/LTA currently fail with `SIGNATURE_PROFILE_UNSUPPORTED`.
+
+## Implementation status (Baseline B)
+
+### CAdES-B
+
+- Detached and attached (encapsulated) CMS `SignedData` via BouncyCastle CMS + `ISigningProvider.SignDigestAsync`.
+- Includes signing certificate, signing-time, and ESS `signing-certificate-v2`.
+- Independently validated with BCL `SignedCms.CheckSignature`.
+
+### XAdES-B
+
+- Enveloped, enveloping, and detached packaging modes.
+- XMLDSig (`SignedXml`) with XAdES qualifying properties: `SigningTime` and `SigningCertificate` under `SignedProperties`.
+- Verifiable with `SignedXml.CheckSignature`.
+- **Gaps vs full ETSI EN 319 132-1 XAdES-B:** does not yet claim full ETSI conformance tooling coverage (e.g. complete `SigningCertificateV2`, data-object format policies, commitment-type, or production-grade Id/schema handling beyond OpenSignature’s verifier). Detached mode packages content under a stable Id for self-contained verification rather than a pure external URI.
+
+### PAdES-B
+
+- PDF **incremental update** with `/ByteRange`, `/Contents` hex CMS container, `/SubFilter /ETSI.CAdES.detached`, and signing certificate material inside the CMS.
+- **Library choice:** `BouncyCastle.Cryptography` for CMS + purpose-built PDF incremental updater (no iText / AGPL dependency).
+- Validated by re-hashing ByteRange bytes and verifying the embedded detached CMS.
+- **Gaps:** no visible appearance, no pre-existing signature field reuse, no DSS/VRI, no multiple signatures orchestration beyond incremental append basics.
+
+### Orchestration defaults
+
+| Format | Default packaging |
+|--------|-------------------|
+| CAdES | Attached (encapsulated) |
+| XAdES | Enveloped |
+| PAdES | Incremental PDF update |
+
+ASiC-S / ASiC-E remain unsupported (`SIGNATURE_FORMAT_UNSUPPORTED`).

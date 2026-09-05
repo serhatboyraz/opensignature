@@ -1,12 +1,17 @@
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
+using OpenSignature.Application.Abstractions.Signing;
 using OpenSignature.Signing.Contracts;
+using OpenSignature.Signing.Formats.Cades;
+using OpenSignature.Signing.Formats.Pades;
+using OpenSignature.Signing.Formats.Xades;
+using OpenSignature.Signing.Orchestration;
 using OpenSignature.Signing.Pfx;
 
 namespace OpenSignature.Signing;
 
 /// <summary>
-/// DI helpers for signing providers.
+/// DI helpers for signing providers and the signature format engine.
 /// </summary>
 public static class SigningServiceCollectionExtensions
 {
@@ -48,6 +53,45 @@ public static class SigningServiceCollectionExtensions
 
         services.AddSingleton<ISigningProvider, PfxSigningProvider>();
         services.AddSigningProviderResolver();
+        return services;
+    }
+
+    /// <summary>
+    /// Registers the OpenSignature signature engine: PFX provider, CAdES/XAdES/PAdES Baseline B
+    /// format signers, and <see cref="ISignatureCreationService"/> (<see cref="SignatureOrchestrator"/>).
+    /// </summary>
+    public static IServiceCollection AddSignatureEngine(
+        this IServiceCollection services,
+        Action<PfxSigningProviderOptions> configurePfx,
+        IEnumerable<KeyValuePair<string, string>>? secrets = null)
+    {
+        ArgumentNullException.ThrowIfNull(services);
+        ArgumentNullException.ThrowIfNull(configurePfx);
+
+        services.AddPfxSigningProvider(configurePfx, secrets);
+
+        services.TryAddSingleton<ICadesBaselineBSigner, CadesBaselineBSigner>();
+        services.TryAddSingleton<IXadesBaselineBSigner, XadesBaselineBSigner>();
+        services.TryAddSingleton<IPadesBaselineBSigner, PadesBaselineBSigner>();
+        services.TryAddSingleton<ISignatureCreationService, SignatureOrchestrator>();
+
+        return services;
+    }
+
+    /// <summary>
+    /// Registers format signers and <see cref="ISignatureCreationService"/> without configuring a PFX provider.
+    /// Callers must register at least one <see cref="ISigningProvider"/> and <see cref="ISigningProviderResolver"/>.
+    /// </summary>
+    public static IServiceCollection AddSignatureFormatEngine(this IServiceCollection services)
+    {
+        ArgumentNullException.ThrowIfNull(services);
+
+        services.AddSigningProviderResolver();
+        services.TryAddSingleton<ICadesBaselineBSigner, CadesBaselineBSigner>();
+        services.TryAddSingleton<IXadesBaselineBSigner, XadesBaselineBSigner>();
+        services.TryAddSingleton<IPadesBaselineBSigner, PadesBaselineBSigner>();
+        services.TryAddSingleton<ISignatureCreationService, SignatureOrchestrator>();
+
         return services;
     }
 }
