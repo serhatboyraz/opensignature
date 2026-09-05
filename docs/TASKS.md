@@ -131,7 +131,7 @@
   - `feat(persistence): add PostgreSQL storage`
 
 ### T013 — Idempotency
-- Status: `TODO`
+- Status: `DONE`
 - Priority: P0
 - Depends on: T012
 - Acceptance:
@@ -196,7 +196,7 @@
   - `feat(queue): add RabbitMQ publisher`
 
 ### T032 — Outbox
-- Status: `TODO`
+- Status: `DONE`
 - Priority: P0
 - Depends on: T012, T031
 - Acceptance:
@@ -221,7 +221,7 @@
   - `feat(worker): add RabbitMQ signing worker`
 
 ### T034 — Retry and Dead Letter
-- Status: `TODO`
+- Status: `DONE`
 - Priority: P0
 - Depends on: T033
 - Acceptance:
@@ -268,7 +268,7 @@
   - `feat(signing): add PFX signing provider`
 
 ### T042 — Provider Selection
-- Status: `TODO`
+- Status: `DONE`
 - Priority: P0
 - Depends on: T041
 - Acceptance:

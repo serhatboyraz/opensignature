@@ -133,6 +133,8 @@ Provider capabilities: list certificates, metadata, create digest, sign digest, 
 
 **PFX (dev/demo):** `PfxSigningProvider` loads PKCS#12 from a configured path or in-memory bytes (`PfxSigningProviderOptions`). Password may come from options (development) or `ISigningSecretProvider` via `PasswordSecretName` (secret-store stub until T113). Certificates without a usable RSA/ECDSA private key, or outside their validity window, are listed with `CanSign=false`. Health reflects load success (`Healthy` / `Degraded` / `Unavailable`). Never commit PFX files or passwords.
 
+**Provider selection:** `ISigningProviderResolver` / `SigningProviderSelector` resolves a registered `ISigningProvider` by `SigningProviderType` and optional provider id from the request/configuration. Providers are registered in DI as `IEnumerable<ISigningProvider>` (e.g. `AddPfxSigningProvider`). Unsupported or ambiguous selections throw `UnsupportedSigningProviderException` (`SIGNING_PROVIDER_UNSUPPORTED`).
+
 **Hardware rule:** for PKCS#11, smart card, and HSM providers, private keys never leave the device. Prefer:
 
 ```text
@@ -159,7 +161,8 @@ MVP: local filesystem. Production adapters: S3-compatible, Azure Blob, S3. Postg
 ```text
 Exchange:     esign.signature (durable, direct)
 Routing key:  signature.created
-Queue:        esign.signature.worker
+Queue:        esign.signature.worker (x-dead-letter-exchange → esign.signature.dlx)
+DLX:          esign.signature.dlx (durable, fanout)
 DLQ:          esign.signature.dlq
 ```
 
@@ -169,7 +172,12 @@ Messages carry job metadata and storage references only (e.g. `jobId`, `tenantId
 
 Processing: deserialize → validate → acquire job lock → verify input → sign → store output → persist final state → ACK.
 
-Transient failures: bounded retries with exponential backoff. Permanent cryptographic failures must not retry forever; they route to the DLQ.
+Retry / DLQ (worker):
+
+- Classify failures as **transient** vs **permanent** (`SigningJobFailureClassifier`; processors may throw `TransientSigningJobException` / `PermanentSigningJobException`).
+- Transient: bounded retries with exponential backoff (`SigningJobRetry` options; attempt tracked via `x-attempt` and `SigningJobMessage.Attempt`).
+- After `MaxAttempts` or on permanent failure: explicit publish to `esign.signature.dlx` → `esign.signature.dlq`, then ACK the original delivery.
+- Worker queue DLX args are a safety net for NACK-without-requeue fallbacks.
 
 ## 8. Outbox Pattern
 
@@ -186,6 +194,8 @@ Worker consumption must be **idempotent** (job lock / state checks) so at-least-
 - Domain entities and queue messages include `TenantId`.
 - Storage keys are tenant-prefixed.
 - Idempotency is scoped as `TenantId + IdempotencyKey`.
+- Application port `ISignatureRequestIdempotencyStore` (EF implementation) looks up by tenant + key, creates when missing, and recovers from unique-constraint races so concurrent callers observe one `SignatureRequest` row.
+- At most one `SigningJob` per signature request (`IX_SigningJobs_SignatureRequestId` unique); `GetOrCreateSigningJobAsync` uses the same conflict-recovery pattern.
 - Auth roadmap: MVP API keys; production OAuth2/OIDC + JWT with tenant isolation and RBAC (Administrator, Signer, Operator, Auditor, Developer).
 - Queries, authorization, and indexes must enforce tenant boundaries; never cross-tenant file or job access by ID alone.
 
@@ -210,7 +220,7 @@ Never log private keys, passwords, PINs, secrets, or document contents. Prefer m
 | Phase 0 (T001–T003) | **Done** — solution bootstrap (`OpenSignature.slnx`), engineering standards, `docker-compose.yml` (Postgres + RabbitMQ) |
 | Domain / persistence | **WIP** — domain model and later Phase 1 tasks |
 | Signing / providers | **WIP** — contracts and engines not yet complete |
-| API async pipeline, outbox, worker | Planned after domain/storage foundations |
+| API async pipeline, outbox, worker | Outbox writer/processor + RabbitMQ publisher/worker skeleton in place; full API pipeline still planned |
 | Docs | This architecture doc (T150); API/security/ops docs follow their tasks |
 
 This document describes the target architecture. Implementation progresses task-by-task in `docs/TASKS.md`; do not assume runtime behavior exists until the corresponding tasks are `DONE`.

@@ -40,6 +40,7 @@ internal sealed class SigningJobConfiguration : IEntityTypeConfiguration<Signing
             .HasDatabaseName("IX_SigningJobs_Status");
 
         builder.HasIndex(e => e.SignatureRequestId)
+            .IsUnique()
             .HasDatabaseName("IX_SigningJobs_SignatureRequestId");
     }
 }

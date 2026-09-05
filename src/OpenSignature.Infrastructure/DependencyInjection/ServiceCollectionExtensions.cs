@@ -1,6 +1,7 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using OpenSignature.Application.Abstractions.Messaging;
+using OpenSignature.Application.Abstractions.Persistence;
 using OpenSignature.Application.Abstractions.Storage;
 using OpenSignature.Infrastructure.Messaging;
 using OpenSignature.Infrastructure.Persistence;
@@ -14,7 +15,8 @@ namespace OpenSignature.Infrastructure;
 public static class ServiceCollectionExtensions
 {
     /// <summary>
-    /// Registers PostgreSQL persistence via EF Core (<see cref="OpenSignatureDbContext"/>).
+    /// Registers PostgreSQL persistence via EF Core (<see cref="OpenSignatureDbContext"/>)
+    /// and the signature-request idempotency store.
     /// </summary>
     public static IServiceCollection AddPersistence(
         this IServiceCollection services,
@@ -25,6 +27,8 @@ public static class ServiceCollectionExtensions
 
         services.AddDbContext<OpenSignatureDbContext>(options =>
             options.UseNpgsql(connectionString));
+
+        services.AddScoped<ISignatureRequestIdempotencyStore, EfSignatureRequestIdempotencyStore>();
 
         return services;
     }
@@ -56,6 +60,31 @@ public static class ServiceCollectionExtensions
 
         services.Configure(configure);
         services.AddSingleton<ISigningJobPublisher, RabbitMqSigningJobPublisher>();
+        return services;
+    }
+
+    /// <summary>
+    /// Registers transactional outbox writer, processor, and background publisher.
+    /// Requires <see cref="AddPersistence"/> and an <see cref="ISigningJobPublisher"/> registration.
+    /// </summary>
+    public static IServiceCollection AddOutboxPublisher(
+        this IServiceCollection services,
+        Action<OutboxOptions>? configure = null)
+    {
+        ArgumentNullException.ThrowIfNull(services);
+
+        if (configure is not null)
+        {
+            services.Configure(configure);
+        }
+        else
+        {
+            services.Configure<OutboxOptions>(_ => { });
+        }
+
+        services.AddScoped<IOutboxWriter, OutboxWriter>();
+        services.AddScoped<IOutboxProcessor, OutboxProcessor>();
+        services.AddHostedService<OutboxPublisherHostedService>();
         return services;
     }
 }
