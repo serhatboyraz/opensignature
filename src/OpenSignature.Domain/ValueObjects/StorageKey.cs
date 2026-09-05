@@ -18,7 +18,8 @@ public sealed record StorageKey
         if (trimmed.Contains("..", StringComparison.Ordinal)
             || trimmed.Contains("\\", StringComparison.Ordinal)
             || trimmed.StartsWith("/", StringComparison.Ordinal)
-            || trimmed.Contains("//", StringComparison.Ordinal))
+            || trimmed.Contains("//", StringComparison.Ordinal)
+            || Path.IsPathRooted(trimmed))
         {
             throw new ArgumentException(
                 "Storage key must be a relative path without traversal segments or backslashes.",

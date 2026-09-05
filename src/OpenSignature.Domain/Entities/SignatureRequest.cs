@@ -151,20 +151,13 @@ public sealed class SignatureRequest
 
     public void MarkQueued(DateTimeOffset? queuedAt = null)
     {
-        EnsureTransitionFrom(SignatureStatus.Created, SignatureStatus.Queued);
-        Status = SignatureStatus.Queued;
+        TransitionTo(SignatureStatus.Queued);
         QueuedAt = queuedAt ?? DateTimeOffset.UtcNow;
     }
 
     public void MarkProcessing(DateTimeOffset? startedAt = null)
     {
-        if (Status is not (SignatureStatus.Queued or SignatureStatus.RetryScheduled))
-        {
-            throw new DomainException(
-                $"Cannot transition signature request from {Status} to {SignatureStatus.Processing}.");
-        }
-
-        Status = SignatureStatus.Processing;
+        TransitionTo(SignatureStatus.Processing);
         StartedAt = startedAt ?? DateTimeOffset.UtcNow;
     }
 
@@ -175,8 +168,7 @@ public sealed class SignatureRequest
             throw new ArgumentException("Output file ID must not be empty.", nameof(outputFileId));
         }
 
-        EnsureTransitionFrom(SignatureStatus.Processing, SignatureStatus.Completed);
-        Status = SignatureStatus.Completed;
+        TransitionTo(SignatureStatus.Completed);
         OutputFileId = outputFileId;
         CompletedAt = completedAt ?? DateTimeOffset.UtcNow;
         ClearError();
@@ -185,8 +177,7 @@ public sealed class SignatureRequest
     public void MarkRejected(ErrorCode errorCode, string? errorMessage = null, DateTimeOffset? failedAt = null)
     {
         ArgumentNullException.ThrowIfNull(errorCode);
-        EnsureTransitionFrom(SignatureStatus.Created, SignatureStatus.Rejected);
-        Status = SignatureStatus.Rejected;
+        TransitionTo(SignatureStatus.Rejected);
         ErrorCode = errorCode;
         ErrorMessage = NormalizeErrorMessage(errorMessage);
         FailedAt = failedAt ?? DateTimeOffset.UtcNow;
@@ -194,13 +185,7 @@ public sealed class SignatureRequest
 
     public void MarkRetryScheduled(ErrorCode? errorCode = null, string? errorMessage = null)
     {
-        if (Status is not (SignatureStatus.Queued or SignatureStatus.Processing))
-        {
-            throw new DomainException(
-                $"Cannot transition signature request from {Status} to {SignatureStatus.RetryScheduled}.");
-        }
-
-        Status = SignatureStatus.RetryScheduled;
+        TransitionTo(SignatureStatus.RetryScheduled);
         RetryCount++;
         ErrorCode = errorCode;
         ErrorMessage = NormalizeErrorMessage(errorMessage);
@@ -209,8 +194,7 @@ public sealed class SignatureRequest
     public void MarkFailed(ErrorCode errorCode, string? errorMessage = null, DateTimeOffset? failedAt = null)
     {
         ArgumentNullException.ThrowIfNull(errorCode);
-        EnsureTransitionFrom(SignatureStatus.Processing, SignatureStatus.Failed);
-        Status = SignatureStatus.Failed;
+        TransitionTo(SignatureStatus.Failed);
         ErrorCode = errorCode;
         ErrorMessage = NormalizeErrorMessage(errorMessage);
         FailedAt = failedAt ?? DateTimeOffset.UtcNow;
@@ -218,15 +202,7 @@ public sealed class SignatureRequest
 
     public void MarkCancelled(DateTimeOffset? cancelledAt = null)
     {
-        if (Status is SignatureStatus.Completed
-            or SignatureStatus.Failed
-            or SignatureStatus.Rejected
-            or SignatureStatus.Cancelled)
-        {
-            throw new DomainException($"Cannot cancel signature request in terminal status {Status}.");
-        }
-
-        Status = SignatureStatus.Cancelled;
+        TransitionTo(SignatureStatus.Cancelled);
         FailedAt = cancelledAt ?? DateTimeOffset.UtcNow;
     }
 
@@ -237,10 +213,7 @@ public sealed class SignatureRequest
             throw new ArgumentException("Certificate ID must not be empty.", nameof(certificateId));
         }
 
-        if (Status is SignatureStatus.Completed
-            or SignatureStatus.Failed
-            or SignatureStatus.Rejected
-            or SignatureStatus.Cancelled)
+        if (SignatureStatusTransitions.IsTerminal(Status))
         {
             throw new DomainException($"Cannot assign certificate when status is {Status}.");
         }
@@ -248,12 +221,10 @@ public sealed class SignatureRequest
         CertificateId = certificateId;
     }
 
-    private void EnsureTransitionFrom(SignatureStatus expected, SignatureStatus target)
+    private void TransitionTo(SignatureStatus target)
     {
-        if (Status != expected)
-        {
-            throw new DomainException($"Cannot transition signature request from {Status} to {target}.");
-        }
+        SignatureStatusTransitions.EnsureCanTransition(Status, target);
+        Status = target;
     }
 
     private void ClearError()
