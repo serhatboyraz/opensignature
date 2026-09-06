@@ -24,12 +24,7 @@ const FORMATS: SignatureFormat[] = ['PAdES', 'XAdES', 'CAdES', 'ASiC_S', 'ASiC_E
 const PROFILES: SignatureProfile[] = ['B', 'T', 'LT', 'LTA']
 const CERT_DEFAULT = 'default'
 
-interface SignatureDashboardPageProps {
-  title: string
-  intro: string
-}
-
-export function SignatureDashboardPage({ title, intro }: SignatureDashboardPageProps) {
+export function SignatureDashboardPage() {
   const queryClient = useQueryClient()
   const [trackedIds, setTrackedIds] = useState(() => readTrackedSignatureIds())
   const [file, setFile] = useState<File | null>(null)
@@ -221,8 +216,8 @@ export function SignatureDashboardPage({ title, intro }: SignatureDashboardPageP
   return (
     <section className="page">
       <header className="page-header">
-        <h1>{title}</h1>
-        <p>{intro}</p>
+        <h1>Dashboard</h1>
+        <p>Create a signing job and watch session-tracked requests move through the queue.</p>
       </header>
 
       <div className="split">

@@ -88,7 +88,7 @@ export function SignatureDetailPage() {
     <section className="page">
       <header className="page-header">
         <p className="eyebrow-link">
-          <Link to="/signatures">← Signatures</Link>
+          <Link to="/dashboard">← Dashboard</Link>
         </p>
         <h1>Signature detail</h1>
         <p className="mono wrap">{id}</p>

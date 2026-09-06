@@ -14,7 +14,7 @@ React administration/demo UI for **OpenSignature**.
 | Path | Purpose |
 |------|---------|
 | `/dashboard` | Create signature + session-tracked status list |
-| `/signatures` | Same create/list UX as dashboard |
+| `/signatures` | Redirects to `/dashboard` |
 | `/signatures/:id` | Status detail, cancel, download when completed |
 | `/certificates` | Public certificate inventory |
 | `/providers` | Providers + per-provider health |

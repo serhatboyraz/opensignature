@@ -5,7 +5,6 @@ const DOCS_URL = 'https://github.com/serhatboyraz/opensignature/tree/main/docs'
 
 const primaryNav = [
   { to: '/dashboard', label: 'Dashboard' },
-  { to: '/signatures', label: 'Signatures' },
   { to: '/certificates', label: 'Certificates' },
   { to: '/providers', label: 'Providers' },
   { to: '/verify', label: 'Verify' },

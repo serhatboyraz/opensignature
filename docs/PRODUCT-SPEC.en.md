@@ -647,7 +647,6 @@ Pages:
 
 ```text
 /dashboard
-/signatures
 /signatures/:id
 /certificates
 /providers

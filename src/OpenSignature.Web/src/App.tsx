@@ -13,24 +13,8 @@ export default function App() {
       <Routes>
         <Route element={<Layout />}>
           <Route index element={<Navigate to="/dashboard" replace />} />
-          <Route
-            path="dashboard"
-            element={
-              <SignatureDashboardPage
-                title="Dashboard"
-                intro="Create a signing job and watch session-tracked requests move through the queue."
-              />
-            }
-          />
-          <Route
-            path="signatures"
-            element={
-              <SignatureDashboardPage
-                title="Signatures"
-                intro="Upload a document, choose format and provider, then follow asynchronous status polling."
-              />
-            }
-          />
+          <Route path="dashboard" element={<SignatureDashboardPage />} />
+          <Route path="signatures" element={<Navigate to="/dashboard" replace />} />
           <Route path="signatures/:id" element={<SignatureDetailPage />} />
           <Route path="verify" element={<VerifyPage />} />
           <Route path="certificates" element={<CertificatesPage />} />

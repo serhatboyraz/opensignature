@@ -14,7 +14,7 @@ export function StubPage({ title, description }: StubPageProps) {
       </header>
       <p className="note">
         This area is a placeholder. Use{' '}
-        <Link to="/signatures">Signatures</Link>,{' '}
+        <Link to="/dashboard">Dashboard</Link>,{' '}
         <Link to="/certificates">Certificates</Link>, or{' '}
         <Link to="/providers">Providers</Link> for live API workflows.
       </p>
