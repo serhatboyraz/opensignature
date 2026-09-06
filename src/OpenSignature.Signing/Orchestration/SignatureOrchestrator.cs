@@ -37,10 +37,17 @@ public sealed class SignatureOrchestrator : ISignatureCreationService
         SignatureProfile profile,
         SigningProviderType providerType,
         SigningCertificateSelector? certificateSelector,
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken = default,
+        SignatureAppearanceOptions? appearance = null)
     {
         ArgumentNullException.ThrowIfNull(inputStream);
         cancellationToken.ThrowIfCancellationRequested();
+
+        if (appearance is { Visible: true } && format != SignatureFormat.PAdES)
+        {
+            throw new InvalidOperationException(
+                "Visible signature appearance is only supported for PAdES.");
+        }
 
         if (profile != SignatureProfile.B)
         {
@@ -68,7 +75,7 @@ public sealed class SignatureOrchestrator : ISignatureCreationService
         {
             SignatureFormat.CAdES => await SignCadesAsync(input, provider, selector, cancellationToken).ConfigureAwait(false),
             SignatureFormat.XAdES => await SignXadesAsync(input, provider, selector, cancellationToken).ConfigureAwait(false),
-            SignatureFormat.PAdES => await SignPadesAsync(input, provider, selector, cancellationToken).ConfigureAwait(false),
+            SignatureFormat.PAdES => await SignPadesAsync(input, provider, selector, appearance, cancellationToken).ConfigureAwait(false),
             _ => throw new UnsupportedSignatureFormatException(
                 $"Signature format '{format}' is not supported.",
                 format)
@@ -125,12 +132,24 @@ public sealed class SignatureOrchestrator : ISignatureCreationService
         byte[] input,
         ISigningProvider provider,
         SigningCertificateSelector selector,
+        SignatureAppearanceOptions? appearance,
         CancellationToken cancellationToken)
     {
+        PadesVisibleAppearance? padesAppearance = null;
+        if (appearance is { Visible: true })
+        {
+            padesAppearance = new PadesVisibleAppearance(
+                appearance.Note,
+                appearance.ImageBytes,
+                appearance.ImageContentType,
+                appearance.PageNumber < 1 ? 1 : appearance.PageNumber);
+        }
+
         var result = await _padesSigner.SignAsync(
             input,
             provider,
             selector,
+            appearance: padesAppearance,
             cancellationToken: cancellationToken).ConfigureAwait(false);
 
         var cert = await provider.GetCertificateAsync(selector, cancellationToken).ConfigureAwait(false);

@@ -24,6 +24,18 @@ public sealed class CreateSignatureCommand
 
     public string? CertificateThumbprint { get; init; }
 
+    public bool VisibleSignature { get; init; }
+
+    public string? SignatureNote { get; init; }
+
+    public int AppearancePageNumber { get; init; } = 1;
+
+    public Stream? AppearanceImage { get; init; }
+
+    public string? AppearanceImageFileName { get; init; }
+
+    public string? AppearanceImageContentType { get; init; }
+
     public string? IdempotencyKey { get; init; }
 
     public CorrelationId? CorrelationId { get; init; }

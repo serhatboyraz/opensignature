@@ -46,6 +46,61 @@ internal sealed class PdfStructure
     public IReadOnlyDictionary<string, string> AcroFormEntries { get; private set; } =
         new Dictionary<string, string>(StringComparer.Ordinal);
 
+    /// <summary>1-based page index; throws when the page does not exist.</summary>
+    public int GetPageObjectNumber(int pageNumber)
+    {
+        if (pageNumber < 1)
+        {
+            throw new ArgumentOutOfRangeException(nameof(pageNumber), pageNumber, "Page number must be at least 1.");
+        }
+
+        var pages = FlattenPageObjectNumbers();
+        if (pageNumber > pages.Count)
+        {
+            throw new InvalidOperationException(
+                $"PDF has {pages.Count} page(s); appearance page {pageNumber} is out of range.");
+        }
+
+        return pages[pageNumber - 1];
+    }
+
+    /// <summary>Visible page box (CropBox, else MediaBox, else inherited from the page tree).</summary>
+    public PdfRectangle GetPageBox(int pageObjectNumber)
+    {
+        var current = pageObjectNumber;
+        var visited = new HashSet<int>();
+        while (visited.Add(current))
+        {
+            var dict = GetDictionary(current);
+            if (TryReadRectangle(dict, "/CropBox", out var crop))
+            {
+                return crop;
+            }
+
+            if (TryReadRectangle(dict, "/MediaBox", out var media))
+            {
+                return media;
+            }
+
+            if (!dict.TryGetValue("/Parent", out var parentRaw)
+                || !PdfInput.TryParseReference(parentRaw, out var parent, out _))
+            {
+                break;
+            }
+
+            current = parent;
+        }
+
+        return new PdfRectangle(0, 0, 612, 792);
+    }
+
+    /// <summary>Existing page annotation object numbers (may be empty).</summary>
+    public IReadOnlyList<int> GetPageAnnotObjectNumbers(int pageObjectNumber)
+    {
+        var dict = GetDictionary(pageObjectNumber);
+        return ResolveReferenceArray(dict, "/Annots");
+    }
+
     public static PdfStructure Load(byte[] pdf)
     {
         ArgumentNullException.ThrowIfNull(pdf);
@@ -140,12 +195,88 @@ internal sealed class PdfStructure
         }
 
         PagesObjectNumber = pages;
-        var pagesDict = GetDictionary(pages);
-        PageCount = TryReadInt(pagesDict, "/Count", out var count) ? count : 1;
-        FirstPageObjectNumber = FindFirstPage(pages);
+        var flattened = FlattenPageObjectNumbers();
+        PageCount = flattened.Count > 0
+            ? flattened.Count
+            : TryReadInt(GetDictionary(pages), "/Count", out var count) ? count : 1;
+        FirstPageObjectNumber = flattened.Count > 0 ? flattened[0] : FindFirstPage(pages);
         var acroForm = ReadAcroForm(CatalogEntries);
         AcroFormEntries = acroForm.Entries;
         ExistingAcroFormFields = acroForm.Fields;
+    }
+
+    private List<int> FlattenPageObjectNumbers()
+    {
+        var pages = new List<int>();
+        CollectPages(PagesObjectNumber, pages, []);
+        return pages;
+    }
+
+    private void CollectPages(int current, List<int> pages, HashSet<int> visited)
+    {
+        if (!visited.Add(current))
+        {
+            throw new InvalidOperationException("PDF page tree contains a cycle.");
+        }
+
+        var dict = GetDictionary(current);
+        var type = dict.TryGetValue("/Type", out var typeRaw) ? typeRaw.Trim() : string.Empty;
+        if (type is "/Page")
+        {
+            pages.Add(current);
+            return;
+        }
+
+        var kids = ResolveReferenceArray(dict, "/Kids");
+        if (kids.Count == 0 && type is not "/Pages")
+        {
+            throw new InvalidOperationException($"PDF object {current} is not a page tree node.");
+        }
+
+        foreach (var kid in kids)
+        {
+            CollectPages(kid, pages, visited);
+        }
+    }
+
+    private static bool TryReadRectangle(
+        IReadOnlyDictionary<string, string> dictionary,
+        string key,
+        out PdfRectangle rectangle)
+    {
+        rectangle = default;
+        if (!dictionary.TryGetValue(key, out var raw) || string.IsNullOrWhiteSpace(raw))
+        {
+            return false;
+        }
+
+        var input = new PdfInput(Encoding.Latin1.GetBytes(raw.Trim()));
+        input.SkipWhitespaceAndComments();
+        if (input.IsEof || input.Peek() != (byte)'[')
+        {
+            return false;
+        }
+
+        var items = input.ReadArrayItems();
+        if (items.Count != 4)
+        {
+            return false;
+        }
+
+        var values = new double[4];
+        for (var i = 0; i < 4; i++)
+        {
+            var itemReader = new PdfInput(Encoding.Latin1.GetBytes(items[i]));
+            if (!itemReader.TryReadNumber(out var number))
+            {
+                return false;
+            }
+
+            values[i] = number;
+        }
+
+        rectangle = new PdfRectangle(values[0], values[1], values[2], values[3]);
+        return true;
     }
 
     private int FindFirstPage(int pagesObjectNumber)

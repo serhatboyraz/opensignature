@@ -227,7 +227,9 @@ code,
 
 input[type='text'],
 input[type='file'],
-select {
+input[type='number'],
+select,
+textarea {
   width: 100%;
   border: 1px solid var(--line);
   background: var(--panel);
@@ -235,6 +237,49 @@ select {
   border-radius: 2px;
   padding: 0.55rem 0.65rem;
   font: inherit;
+}
+
+textarea {
+  min-height: 4.5rem;
+  resize: vertical;
+}
+
+.field.checkbox {
+  display: flex;
+  align-items: center;
+  gap: 0.55rem;
+  grid-template-columns: none;
+}
+
+.field.checkbox input[type='checkbox'] {
+  width: 1.05rem;
+  height: 1.05rem;
+  margin: 0;
+  accent-color: var(--accent);
+}
+
+.appearance-fields {
+  display: grid;
+  gap: 0.85rem;
+  margin: 0;
+  padding: 0.85rem 0 0;
+  border: 0;
+  border-top: 1px solid var(--line);
+}
+
+.appearance-fields legend {
+  padding: 0;
+  font-size: 0.82rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+@media (min-width: 640px) {
+  .appearance-row {
+    grid-template-columns: minmax(6rem, 0.35fr) minmax(0, 1fr);
+  }
 }
 
 input:focus,

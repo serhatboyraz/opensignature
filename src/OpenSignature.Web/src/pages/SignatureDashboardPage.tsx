@@ -29,6 +29,10 @@ export function SignatureDashboardPage({ title, intro }: SignatureDashboardPageP
   const [profile, setProfile] = useState<SignatureProfile>('B')
   const [signingProvider, setSigningProvider] = useState<SigningProviderType>('Pfx')
   const [certificateThumbprint, setCertificateThumbprint] = useState('')
+  const [visibleSignature, setVisibleSignature] = useState(false)
+  const [signatureNote, setSignatureNote] = useState('')
+  const [signaturePage, setSignaturePage] = useState('1')
+  const [signatureImage, setSignatureImage] = useState<File | null>(null)
   const [formError, setFormError] = useState<string | null>(null)
 
   const statusQueries = useQueries({
@@ -49,6 +53,8 @@ export function SignatureDashboardPage({ title, intro }: SignatureDashboardPageP
       void queryClient.invalidateQueries({ queryKey: ['signature', created.id] })
       setFormError(null)
       setFile(null)
+      setSignatureImage(null)
+      setSignatureNote('')
     },
     onError: (error: unknown) => {
       if (error instanceof ApiError) {
@@ -67,12 +73,26 @@ export function SignatureDashboardPage({ title, intro }: SignatureDashboardPageP
       setFormError('Choose a file to sign.')
       return
     }
+    if (format === 'PAdES' && visibleSignature) {
+      const page = Number.parseInt(signaturePage, 10)
+      if (!Number.isInteger(page) || page < 1) {
+        setFormError('Signature page must be a positive number.')
+        return
+      }
+    }
     createMutation.mutate({
       file,
       format,
       profile,
       signingProvider,
       certificateThumbprint: certificateThumbprint || undefined,
+      visibleSignature: format === 'PAdES' && visibleSignature,
+      signatureNote: format === 'PAdES' && visibleSignature ? signatureNote || undefined : undefined,
+      signaturePage:
+        format === 'PAdES' && visibleSignature
+          ? Number.parseInt(signaturePage, 10) || 1
+          : undefined,
+      signatureImage: format === 'PAdES' && visibleSignature ? signatureImage : undefined,
     })
   }
 
@@ -136,6 +156,12 @@ export function SignatureDashboardPage({ title, intro }: SignatureDashboardPageP
               </select>
             </label>
           </div>
+          {profile !== 'B' ? (
+            <p className="empty">
+              T, LT, and LTA require a configured RFC 3161 timestamp authority. LT and LTA also
+              need CRL or OCSP evidence. OpenSignature never silently downgrades to Baseline B.
+            </p>
+          ) : null}
           <label className="field">
             <span>Certificate thumbprint (optional)</span>
             <input
@@ -146,6 +172,58 @@ export function SignatureDashboardPage({ title, intro }: SignatureDashboardPageP
               autoComplete="off"
             />
           </label>
+          {format === 'PAdES' ? (
+            <fieldset className="appearance-fields">
+              <legend>Visible PDF appearance</legend>
+              <label className="field checkbox">
+                <input
+                  type="checkbox"
+                  checked={visibleSignature}
+                  onChange={(event) => setVisibleSignature(event.target.checked)}
+                />
+                <span>Show a visible signature stamp on the PDF</span>
+              </label>
+              {visibleSignature ? (
+                <>
+                  <p className="note">
+                    The stamp includes “Digitally signed by …” from the certificate, the signing
+                    time, and an optional note or image.
+                  </p>
+                  <label className="field">
+                    <span>Note (optional)</span>
+                    <textarea
+                      rows={3}
+                      maxLength={500}
+                      value={signatureNote}
+                      onChange={(event) => setSignatureNote(event.target.value)}
+                      placeholder="Approved / Signed by …"
+                    />
+                  </label>
+                  <div className="field-row appearance-row">
+                    <label className="field">
+                      <span>Page</span>
+                      <input
+                        type="number"
+                        min={1}
+                        value={signaturePage}
+                        onChange={(event) => setSignaturePage(event.target.value)}
+                      />
+                    </label>
+                    <label className="field">
+                      <span>Image (optional JPEG or PNG)</span>
+                      <input
+                        type="file"
+                        accept="image/jpeg,image/png,.jpg,.jpeg,.png"
+                        onChange={(event) =>
+                          setSignatureImage(event.target.files?.[0] ?? null)
+                        }
+                      />
+                    </label>
+                  </div>
+                </>
+              ) : null}
+            </fieldset>
+          ) : null}
           {formError ? <p className="error-text">{formError}</p> : null}
           <button type="submit" className="btn primary" disabled={createMutation.isPending}>
             {createMutation.isPending ? 'Submitting…' : 'Submit for signing'}

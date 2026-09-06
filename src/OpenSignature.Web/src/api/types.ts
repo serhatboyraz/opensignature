@@ -41,6 +41,10 @@ export interface SignatureStatusResponse {
   errorCode?: string | null
   errorMessage?: string | null
   correlationId?: string | null
+  visibleSignature?: boolean
+  signatureNote?: string | null
+  appearancePageNumber?: number
+  hasAppearanceImage?: boolean
   statusUrl: string
 }
 

@@ -70,6 +70,88 @@ public sealed class SignatureOrchestratorTests
     }
 
     [Fact]
+    public async Task Pades_visible_appearance_is_applied_through_orchestrator()
+    {
+        using var material = EphemeralPfx.CreateRsa(
+            "CN=OpenSignature Visible",
+            DateTimeOffset.UtcNow.AddDays(-1),
+            DateTimeOffset.UtcNow.AddYears(1),
+            TestPassword);
+
+        var services = new ServiceCollection();
+        services.AddSignatureEngine(options =>
+        {
+            options.ProviderId = "pfx-visible";
+            options.Name = "Visible PFX";
+            options.CertificateBytes = material.PfxBytes;
+            options.Password = TestPassword;
+        });
+
+        await using var provider = services.BuildServiceProvider();
+        var orchestrator = provider.GetRequiredService<ISignatureCreationService>();
+
+        await using var input = new MemoryStream(PadesBaselineBSigner.CreateMinimalPdf());
+        var result = await orchestrator.SignAsync(
+            input,
+            SignatureFormat.PAdES,
+            SignatureProfile.B,
+            SigningProviderType.Pfx,
+            certificateSelector: null,
+            appearance: new SignatureAppearanceOptions(
+                Visible: true,
+                Note: "Orchestrator note",
+                PageNumber: 1,
+                ImageBytes: null,
+                ImageContentType: null));
+
+        await using var buffer = new MemoryStream();
+        await result.Content.CopyToAsync(buffer);
+        var ascii = Encoding.ASCII.GetString(buffer.ToArray());
+        Assert.Contains("Digitally signed by OpenSignature Visible", ascii, StringComparison.Ordinal);
+        Assert.Contains("Orchestrator note", ascii, StringComparison.Ordinal);
+        PadesBaselineBSigner.ValidateSignedPdf(buffer.ToArray());
+    }
+
+    [Fact]
+    public async Task Visible_appearance_is_rejected_for_non_pades()
+    {
+        using var material = EphemeralPfx.CreateRsa(
+            "CN=OpenSignature CAdES Reject Appearance",
+            DateTimeOffset.UtcNow.AddDays(-1),
+            DateTimeOffset.UtcNow.AddYears(1),
+            TestPassword);
+
+        var services = new ServiceCollection();
+        services.AddSignatureEngine(options =>
+        {
+            options.ProviderId = "pfx-cades-appearance";
+            options.Name = "CAdES appearance reject PFX";
+            options.CertificateBytes = material.PfxBytes;
+            options.Password = TestPassword;
+        });
+
+        await using var provider = services.BuildServiceProvider();
+        var orchestrator = provider.GetRequiredService<ISignatureCreationService>();
+
+        await using var input = new MemoryStream(Encoding.UTF8.GetBytes("cades-no-appearance"));
+        var ex = await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            orchestrator.SignAsync(
+                input,
+                SignatureFormat.CAdES,
+                SignatureProfile.B,
+                SigningProviderType.Pfx,
+                certificateSelector: null,
+                appearance: new SignatureAppearanceOptions(
+                    Visible: true,
+                    Note: "not allowed",
+                    PageNumber: 1,
+                    ImageBytes: null,
+                    ImageContentType: null)));
+
+        Assert.Contains("PAdES", ex.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public async Task Unsupported_profile_is_rejected_without_downgrade()
     {
         using var material = EphemeralPfx.CreateRsa(

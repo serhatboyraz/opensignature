@@ -156,6 +156,161 @@ public sealed class PadesBaselineBTests
         Assert.Equal(2, signed.PagesObjectNumber);
     }
 
+    [Fact]
+    public async Task Invisible_default_uses_zero_rect()
+    {
+        using var material = CreateMaterial();
+        await using var provider = CreateProvider(material);
+        var selector = await DefaultSelectorAsync(provider);
+
+        var signer = new PadesBaselineBSigner();
+        var result = await signer.SignAsync(PadesBaselineBSigner.CreateMinimalPdf(), provider, selector);
+
+        var ascii = Encoding.ASCII.GetString(result.SignedPdf);
+        Assert.Contains("/Rect [0 0 0 0]", ascii, StringComparison.Ordinal);
+        Assert.DoesNotContain("/Subtype /Form", ascii, StringComparison.Ordinal);
+        PadesBaselineBSigner.ValidateSignedPdf(result.SignedPdf);
+    }
+
+    [Fact]
+    public async Task Visible_text_appearance_includes_signed_by_and_note()
+    {
+        using var material = CreateMaterial();
+        await using var provider = CreateProvider(material);
+        var selector = await DefaultSelectorAsync(provider);
+        var pdf = PadesBaselineBSigner.CreateMinimalPdf();
+
+        var signer = new PadesBaselineBSigner();
+        var result = await signer.SignAsync(
+            pdf,
+            provider,
+            selector,
+            appearance: new PadesVisibleAppearance("Approved for release", ImageBytes: null, ImageContentType: null));
+
+        var ascii = Encoding.ASCII.GetString(result.SignedPdf);
+        Assert.Contains("Digitally signed by OpenSignature PAdES", ascii, StringComparison.Ordinal);
+        Assert.Contains("Approved for release", ascii, StringComparison.Ordinal);
+        Assert.Contains("/Subtype /Form", ascii, StringComparison.Ordinal);
+        Assert.Contains("/AP << /N", ascii, StringComparison.Ordinal);
+        Assert.DoesNotContain("/Rect [0 0 0 0]", ascii, StringComparison.Ordinal);
+        Assert.Contains("/Annots [", ascii, StringComparison.Ordinal);
+        PadesBaselineBSigner.ValidateSignedPdf(result.SignedPdf);
+
+        var signed = PdfStructure.Load(result.SignedPdf);
+        Assert.Equal(1, signed.PageCount);
+        Assert.Equal(3, signed.FirstPageObjectNumber);
+    }
+
+    [Fact]
+    public async Task Visible_jpeg_appearance_embeds_image_xobject()
+    {
+        using var material = CreateMaterial();
+        await using var provider = CreateProvider(material);
+        var selector = await DefaultSelectorAsync(provider);
+
+        var signer = new PadesBaselineBSigner();
+        var result = await signer.SignAsync(
+            PadesBaselineBSigner.CreateMinimalPdf(),
+            provider,
+            selector,
+            appearance: new PadesVisibleAppearance(
+                "With image",
+                TinyJpeg(),
+                "image/jpeg"));
+
+        var ascii = Encoding.ASCII.GetString(result.SignedPdf);
+        Assert.Contains("/Subtype /Image", ascii, StringComparison.Ordinal);
+        Assert.Contains("/DCTDecode", ascii, StringComparison.Ordinal);
+        Assert.Contains("/Im0", ascii, StringComparison.Ordinal);
+        PadesBaselineBSigner.ValidateSignedPdf(result.SignedPdf);
+    }
+
+    [Fact]
+    public async Task Visible_png_appearance_embeds_flate_image()
+    {
+        using var material = CreateMaterial();
+        await using var provider = CreateProvider(material);
+        var selector = await DefaultSelectorAsync(provider);
+
+        var signer = new PadesBaselineBSigner();
+        var result = await signer.SignAsync(
+            PadesBaselineBSigner.CreateMinimalPdf(),
+            provider,
+            selector,
+            appearance: new PadesVisibleAppearance(
+                null,
+                TinyPng(),
+                "image/png"));
+
+        var ascii = Encoding.ASCII.GetString(result.SignedPdf);
+        Assert.Contains("/Subtype /Image", ascii, StringComparison.Ordinal);
+        Assert.Contains("/FlateDecode", ascii, StringComparison.Ordinal);
+        Assert.Contains("Digitally signed by OpenSignature PAdES", ascii, StringComparison.Ordinal);
+        PadesBaselineBSigner.ValidateSignedPdf(result.SignedPdf);
+    }
+
+    [Fact]
+    public void Common_name_is_parsed_from_subject()
+    {
+        Assert.Equal("Alice Example", PdfLiteral.CommonNameFromSubject("CN=Alice Example, O=OpenSignature"));
+        Assert.Equal("Unknown signer", PdfLiteral.CommonNameFromSubject(" "));
+    }
+
+    private static byte[] TinyJpeg() =>
+    [
+        0xFF, 0xD8,
+        0xFF, 0xC0, 0x00, 0x0B, 0x08, 0x00, 0x01, 0x00, 0x01, 0x03, 0x01, 0x11, 0x00,
+        0xFF, 0xD9
+    ];
+
+    private static byte[] TinyPng()
+    {
+        var scanline = new byte[] { 0, 200, 30, 40 };
+        using var deflateBuffer = new MemoryStream();
+        using (var zlib = new System.IO.Compression.ZLibStream(deflateBuffer, System.IO.Compression.CompressionLevel.SmallestSize, leaveOpen: true))
+        {
+            zlib.Write(scanline);
+        }
+
+        var idat = deflateBuffer.ToArray();
+        using var png = new MemoryStream();
+        png.Write([0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A]);
+        WritePngChunk(png, "IHDR", [0, 0, 0, 1, 0, 0, 0, 1, 8, 2, 0, 0, 0]);
+        WritePngChunk(png, "IDAT", idat);
+        WritePngChunk(png, "IEND", []);
+        return png.ToArray();
+    }
+
+    private static void WritePngChunk(Stream png, string type, byte[] data)
+    {
+        var typeBytes = Encoding.ASCII.GetBytes(type);
+        var length = BitConverter.GetBytes(System.Net.IPAddress.HostToNetworkOrder(data.Length));
+        png.Write(length);
+        png.Write(typeBytes);
+        png.Write(data);
+        var crcInput = new byte[typeBytes.Length + data.Length];
+        Buffer.BlockCopy(typeBytes, 0, crcInput, 0, typeBytes.Length);
+        Buffer.BlockCopy(data, 0, crcInput, typeBytes.Length, data.Length);
+        var crc = System.Net.IPAddress.HostToNetworkOrder(unchecked((int)Crc32(crcInput)));
+        png.Write(BitConverter.GetBytes(crc));
+    }
+
+    private static uint Crc32(byte[] data)
+    {
+        var crc = 0xFFFFFFFF;
+        foreach (var b in data)
+        {
+            crc ^= b;
+            for (var i = 0; i < 8; i++)
+            {
+                var mask = (crc & 1) != 0 ? 0xEDB88320 : 0U;
+                crc = (crc >> 1) ^ mask;
+            }
+        }
+
+        return ~crc;
+    }
+
     private static EphemeralPfx CreateMaterial() =>
         EphemeralPfx.CreateRsa(
             "CN=OpenSignature PAdES",

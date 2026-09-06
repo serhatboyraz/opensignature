@@ -25,7 +25,11 @@ public sealed record SignatureRequestStatusDto(
     DateTimeOffset? FailedAt,
     string? ErrorCode,
     string? ErrorMessage,
-    string CorrelationId);
+    string CorrelationId,
+    bool VisibleSignature,
+    string? SignatureNote,
+    int AppearancePageNumber,
+    bool HasAppearanceImage);
 
 /// <summary>Outcome of opening signed content.</summary>
 public abstract record SignatureContentResult

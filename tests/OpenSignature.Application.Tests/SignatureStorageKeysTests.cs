@@ -33,6 +33,20 @@ public sealed class SignatureStorageKeysTests
     }
 
     [Fact]
+    public void ForAppearance_builds_expected_key()
+    {
+        var tenantId = TenantId.Create("tenant-c");
+        var signatureId = Guid.Parse("aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee");
+        var timestamp = new DateTimeOffset(2026, 9, 6, 0, 0, 0, TimeSpan.Zero);
+
+        var key = SignatureStorageKeys.ForAppearance(tenantId, signatureId, timestamp);
+
+        Assert.Equal(
+            "tenants/tenant-c/signatures/2026/09/06/aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee/appearance.bin",
+            key.Value);
+    }
+
+    [Fact]
     public void ForInput_rejects_tenant_with_path_separator()
     {
         var tenantId = TenantId.Create("evil/tenant");

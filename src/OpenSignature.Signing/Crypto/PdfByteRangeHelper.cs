@@ -58,9 +58,46 @@ public static partial class PdfByteRangeHelper
     }
 
     /// <summary>
-    /// Locates a hex Contents placeholder and derives a two-segment ByteRange covering the PDF
-    /// excluding the Contents value (including angle brackets).
+    /// Reads the last <c>/ByteRange [a b c d]</c> array stored in the PDF (the values written at signing time).
+    /// After later incremental updates, this must be used instead of recomputing ranges from the current file length.
     /// </summary>
+    public static int[] ReadStoredByteRange(byte[] pdf)
+    {
+        ArgumentNullException.ThrowIfNull(pdf);
+        var ascii = Encoding.ASCII.GetString(pdf);
+        var dictStart = FindLastCadesSignatureDictionary(ascii);
+        var index = ascii.IndexOf("/ByteRange", dictStart, StringComparison.Ordinal);
+        if (index < 0)
+        {
+            throw new InvalidOperationException("PDF does not contain a /ByteRange array.");
+        }
+
+        var rangeStart = ascii.IndexOf('[', index);
+        var rangeEnd = ascii.IndexOf(']', rangeStart + 1);
+        if (rangeStart < 0 || rangeEnd < 0)
+        {
+            throw new InvalidOperationException("PDF /ByteRange brackets were not found.");
+        }
+
+        var inner = ascii.Substring(rangeStart + 1, rangeEnd - rangeStart - 1)
+            .Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries);
+        if (inner.Length != 4)
+        {
+            throw new InvalidOperationException("PDF /ByteRange must contain four integers.");
+        }
+
+        var values = new int[4];
+        for (var i = 0; i < 4; i++)
+        {
+            if (!int.TryParse(inner[i], NumberStyles.Integer, CultureInfo.InvariantCulture, out values[i]))
+            {
+                throw new InvalidOperationException($"PDF /ByteRange value '{inner[i]}' is not an integer.");
+            }
+        }
+
+        return values;
+    }
+
     public static PdfContentsPlaceholder FindContentsPlaceholder(
         byte[] pdf,
         int contentsHexLength,
@@ -152,7 +189,11 @@ public static partial class PdfByteRangeHelper
     /// <summary>
     /// Patches a fixed-width ByteRange array in the PDF (ten-digit zero-padded integers).
     /// </summary>
-    public static void PatchByteRange(byte[] pdf, string markerPrefix, IReadOnlyList<int> byteRange)
+    public static void PatchByteRange(
+        byte[] pdf,
+        string markerPrefix,
+        IReadOnlyList<int> byteRange,
+        int searchFromOffset = 0)
     {
         ArgumentNullException.ThrowIfNull(pdf);
         ArgumentException.ThrowIfNullOrWhiteSpace(markerPrefix);
@@ -164,7 +205,7 @@ public static partial class PdfByteRangeHelper
         }
 
         var ascii = Encoding.ASCII.GetString(pdf);
-        var index = ascii.IndexOf(markerPrefix, StringComparison.Ordinal);
+        var index = ascii.IndexOf(markerPrefix, searchFromOffset, StringComparison.Ordinal);
         if (index < 0)
         {
             throw new InvalidOperationException("ByteRange marker was not found in the PDF.");
@@ -197,13 +238,12 @@ public static partial class PdfByteRangeHelper
     {
         ArgumentNullException.ThrowIfNull(pdf);
         var ascii = Encoding.ASCII.GetString(pdf);
-        var matches = ContentsPlaceholderRegex().Matches(ascii);
-        if (matches.Count == 0)
+        var dictStart = FindLastCadesSignatureDictionary(ascii);
+        var match = ContentsPlaceholderRegex().Match(ascii, dictStart);
+        if (!match.Success)
         {
             throw new InvalidOperationException("PDF does not contain a /Contents <...> value.");
         }
-
-        var match = matches[^1];
 
         var hex = match.Groups["hex"].Value;
         // Trim trailing padding zeros conservatively while keeping valid DER
@@ -235,6 +275,17 @@ public static partial class PdfByteRangeHelper
         }
 
         return cms;
+    }
+
+    private static int FindLastCadesSignatureDictionary(string ascii)
+    {
+        var index = ascii.LastIndexOf("/SubFilter /ETSI.CAdES.detached", StringComparison.Ordinal);
+        if (index < 0)
+        {
+            throw new InvalidOperationException("PDF does not contain a PAdES CAdES signature dictionary.");
+        }
+
+        return Math.Max(0, index - 80);
     }
 
     private static int ReadAsn1Length(byte[] data, ref int offset)

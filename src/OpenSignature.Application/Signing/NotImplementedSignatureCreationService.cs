@@ -15,7 +15,8 @@ public sealed class NotImplementedSignatureCreationService : ISignatureCreationS
         SignatureProfile profile,
         SigningProviderType providerType,
         SigningCertificateSelector? certificateSelector,
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken = default,
+        SignatureAppearanceOptions? appearance = null)
     {
         ArgumentNullException.ThrowIfNull(inputStream);
         cancellationToken.ThrowIfCancellationRequested();

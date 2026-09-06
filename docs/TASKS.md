@@ -352,6 +352,27 @@
 - Commit:
   - `feat(signing): orchestrate signature creation`
 
+### T055 — PAdES Visible Appearance
+- Status: `DONE`
+- Priority: P1
+- Depends on: T053, T054, T060, T131
+- Scope:
+  - Optional visible PAdES signature widget (non-zero Rect + appearance stream).
+  - Stamp text: digitally signed by certificate CN, signing time, optional note.
+  - Optional JPEG/PNG appearance image stored as a separate file (not in RabbitMQ).
+  - API/UI opt-in for PAdES only; default remains invisible.
+- Acceptance:
+  - Invisible signing still uses `/Rect [0 0 0 0]` and validates.
+  - Visible signing draws on the selected page and remains cryptographically valid.
+  - Note and image appear in the PDF appearance; image binaries are not placed on the queue.
+- Tests:
+  - visible text appearance
+  - visible JPEG/PNG appearance
+  - invisible default unchanged
+  - PAdES-only validation for appearance fields
+- Commit:
+  - `feat(signing): add PAdES visible signature appearance`
+
 ---
 
 ## Phase 6 — API

@@ -132,6 +132,8 @@ public sealed class SignatureSigningJobProcessor : ISigningJobProcessor
             selector = SigningCertificateSelector.ByThumbprint(message.CertificateThumbprint);
         }
 
+        var appearance = await LoadAppearanceAsync(request, cancellationToken).ConfigureAwait(false);
+
         SignatureCreationResult signed;
         try
         {
@@ -142,7 +144,8 @@ public sealed class SignatureSigningJobProcessor : ISigningJobProcessor
                     request.Profile,
                     request.SigningProvider,
                     selector,
-                    cancellationToken)
+                    cancellationToken,
+                    appearance)
                 .ConfigureAwait(false);
         }
         catch (UnsupportedSignatureProfileException ex)
@@ -282,4 +285,41 @@ public sealed class SignatureSigningJobProcessor : ISigningJobProcessor
         SignatureFormat.ASiC_E => "signed.asice",
         _ => "signed.bin"
     };
+
+    private async Task<SignatureAppearanceOptions?> LoadAppearanceAsync(
+        SignatureRequest request,
+        CancellationToken cancellationToken)
+    {
+        if (request.Appearance is not { Visible: true })
+        {
+            return null;
+        }
+
+        byte[]? imageBytes = null;
+        string? imageContentType = null;
+        if (request.Appearance.ImageFileId is Guid imageId)
+        {
+            var imageFile = await _db.StoredFiles
+                .AsNoTracking()
+                .SingleOrDefaultAsync(f => f.Id == imageId, cancellationToken)
+                .ConfigureAwait(false);
+            if (imageFile is not null && !imageFile.IsDeleted)
+            {
+                await using var imageStream = await _fileStorage
+                    .OpenReadAsync(imageFile.StorageKey, cancellationToken)
+                    .ConfigureAwait(false);
+                await using var buffer = new MemoryStream();
+                await imageStream.CopyToAsync(buffer, cancellationToken).ConfigureAwait(false);
+                imageBytes = buffer.ToArray();
+                imageContentType = imageFile.ContentType;
+            }
+        }
+
+        return new SignatureAppearanceOptions(
+            Visible: true,
+            Note: request.Appearance.Note,
+            PageNumber: request.Appearance.PageNumber,
+            ImageBytes: imageBytes,
+            ImageContentType: imageContentType);
+    }
 }

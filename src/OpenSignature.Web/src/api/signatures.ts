@@ -13,6 +13,10 @@ export interface CreateSignatureInput {
   profile: SignatureProfile
   signingProvider: SigningProviderType
   certificateThumbprint?: string
+  visibleSignature?: boolean
+  signatureNote?: string
+  signaturePage?: number
+  signatureImage?: File | null
 }
 
 export async function createSignature(
@@ -25,6 +29,18 @@ export async function createSignature(
   form.append('signingProvider', input.signingProvider)
   if (input.certificateThumbprint?.trim()) {
     form.append('certificateThumbprint', input.certificateThumbprint.trim())
+  }
+  if (input.format === 'PAdES' && input.visibleSignature) {
+    form.append('visibleSignature', 'true')
+    if (input.signatureNote?.trim()) {
+      form.append('signatureNote', input.signatureNote.trim())
+    }
+    if (input.signaturePage && input.signaturePage > 0) {
+      form.append('signaturePage', String(input.signaturePage))
+    }
+    if (input.signatureImage) {
+      form.append('signatureImage', input.signatureImage)
+    }
   }
 
   return apiJson<SignatureCreateResponse>('/api/v1/signatures', {

@@ -6,6 +6,14 @@ namespace OpenSignature.Domain.Entities;
 
 public sealed class SignatureRequest
 {
+    private SignatureRequest()
+    {
+        TenantId = null!;
+        CorrelationId = null!;
+        CreatedBy = string.Empty;
+        Appearance = PadesAppearanceSettings.Create(visible: false);
+    }
+
     private SignatureRequest(
         Guid id,
         TenantId tenantId,
@@ -48,6 +56,7 @@ public sealed class SignatureRequest
         ErrorMessage = errorMessage;
         CreatedBy = createdBy;
         IdempotencyKey = idempotencyKey;
+        Appearance = PadesAppearanceSettings.Invisible;
     }
 
     public Guid Id { get; private set; }
@@ -90,6 +99,8 @@ public sealed class SignatureRequest
 
     public string? IdempotencyKey { get; private set; }
 
+    public PadesAppearanceSettings Appearance { get; private set; }
+
     public static SignatureRequest Create(
         TenantId tenantId,
         CorrelationId correlationId,
@@ -101,7 +112,8 @@ public sealed class SignatureRequest
         Guid? certificateId = null,
         string? idempotencyKey = null,
         DateTimeOffset? createdAt = null,
-        Guid? id = null)
+        Guid? id = null,
+        PadesAppearanceSettings? appearance = null)
     {
         ArgumentNullException.ThrowIfNull(tenantId);
         ArgumentNullException.ThrowIfNull(correlationId);
@@ -132,7 +144,7 @@ public sealed class SignatureRequest
             normalizedIdempotencyKey = idempotencyKey.Trim();
         }
 
-        return new SignatureRequest(
+        var request = new SignatureRequest(
             id: id ?? Guid.CreateVersion7(),
             tenantId: tenantId,
             correlationId: correlationId,
@@ -153,6 +165,8 @@ public sealed class SignatureRequest
             errorMessage: null,
             createdBy: createdBy.Trim(),
             idempotencyKey: normalizedIdempotencyKey);
+        request.Appearance = appearance ?? PadesAppearanceSettings.Create(visible: false);
+        return request;
     }
 
     public void MarkQueued(DateTimeOffset? queuedAt = null)

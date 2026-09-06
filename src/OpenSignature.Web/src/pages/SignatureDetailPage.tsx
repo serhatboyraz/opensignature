@@ -135,6 +135,22 @@ export function SignatureDetailPage() {
               <dt>Correlation</dt>
               <dd>{data.correlationId ?? '—'}</dd>
             </div>
+            <div>
+              <dt>Visible signature</dt>
+              <dd>{data.visibleSignature ? 'Yes' : 'No'}</dd>
+            </div>
+            <div>
+              <dt>Appearance page</dt>
+              <dd>{data.visibleSignature ? data.appearancePageNumber ?? 1 : '—'}</dd>
+            </div>
+            <div className="span-2">
+              <dt>Signature note</dt>
+              <dd>{data.signatureNote?.trim() ? data.signatureNote : '—'}</dd>
+            </div>
+            <div>
+              <dt>Appearance image</dt>
+              <dd>{data.hasAppearanceImage ? 'Yes' : 'No'}</dd>
+            </div>
             <div className="span-2">
               <dt>Error code</dt>
               <dd className={data.errorCode ? 'error-text' : undefined}>

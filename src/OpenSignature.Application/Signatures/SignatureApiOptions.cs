@@ -12,4 +12,7 @@ public sealed class SignatureApiOptions
 
     /// <summary>Maximum upload size in bytes (default 25 MiB).</summary>
     public long MaxUploadBytes { get; set; } = 25 * 1024 * 1024;
+
+    /// <summary>Maximum visible-signature image size in bytes (default 2 MiB).</summary>
+    public long MaxAppearanceImageBytes { get; set; } = 2 * 1024 * 1024;
 }

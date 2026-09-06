@@ -113,6 +113,13 @@ public sealed class EfSignatureRequestService : ISignatureRequestService
 
         // Certificate thumbprint is forwarded on the job message for Worker certificate selection.
         var certificateThumbprint = NormalizeOptional(command.CertificateThumbprint);
+        var appearance = await StoreAppearanceAsync(
+                command,
+                tenantId,
+                signatureId,
+                createdAt,
+                cancellationToken)
+            .ConfigureAwait(false);
 
         var storedFile = StoredFile.Create(
             storageKey: storageKey,
@@ -133,7 +140,8 @@ public sealed class EfSignatureRequestService : ISignatureRequestService
             createdBy: command.CreatedBy,
             idempotencyKey: idempotencyKey,
             createdAt: createdAt,
-            id: signatureId);
+            id: signatureId,
+            appearance: appearance);
 
         request.MarkQueued(createdAt);
 
@@ -164,6 +172,13 @@ public sealed class EfSignatureRequestService : ISignatureRequestService
             _db.ChangeTracker.Clear();
 
             await TryDeleteStorageAsync(storageKey, cancellationToken).ConfigureAwait(false);
+            if (appearance.ImageFileId is not null)
+            {
+                await TryDeleteStorageAsync(
+                        SignatureStorageKeys.ForAppearance(tenantId, signatureId, createdAt),
+                        cancellationToken)
+                    .ConfigureAwait(false);
+            }
 
             var raced = await FindByIdempotencyKeyAsync(tenantId, idempotencyKey, cancellationToken)
                 .ConfigureAwait(false);
@@ -352,6 +367,191 @@ public sealed class EfSignatureRequestService : ISignatureRequestService
                     ex.Message);
             }
         }
+
+        ValidateAppearance(command);
+    }
+
+    private static void ValidateAppearance(CreateSignatureCommand command)
+    {
+        var hasNote = !string.IsNullOrWhiteSpace(command.SignatureNote);
+        var hasImage = command.AppearanceImage is not null;
+        var visible = command.VisibleSignature || hasNote || hasImage;
+        if (!visible)
+        {
+            return;
+        }
+
+        if (command.Format != SignatureFormat.PAdES)
+        {
+            throw new SignatureRequestValidationException(
+                "SIGNATURE_REQUEST_INVALID",
+                "Visible signature appearance (note or image) is only supported for PAdES.");
+        }
+
+        if (command.AppearancePageNumber < 1)
+        {
+            throw new SignatureRequestValidationException(
+                "SIGNATURE_REQUEST_INVALID",
+                "Appearance page number must be at least 1.");
+        }
+
+        if (command.SignatureNote is { Length: > PadesAppearanceSettings.MaxNoteLength })
+        {
+            throw new SignatureRequestValidationException(
+                "SIGNATURE_REQUEST_INVALID",
+                $"Signature note must not exceed {PadesAppearanceSettings.MaxNoteLength} characters.");
+        }
+    }
+
+    private async Task<PadesAppearanceSettings> StoreAppearanceAsync(
+        CreateSignatureCommand command,
+        TenantId tenantId,
+        Guid signatureId,
+        DateTimeOffset createdAt,
+        CancellationToken cancellationToken)
+    {
+        var hasNote = !string.IsNullOrWhiteSpace(command.SignatureNote);
+        var hasImage = command.AppearanceImage is not null;
+        var visible = command.VisibleSignature || hasNote || hasImage;
+        if (!visible)
+        {
+            return PadesAppearanceSettings.Create(visible: false);
+        }
+
+        Guid? imageFileId = null;
+        if (hasImage)
+        {
+            imageFileId = await SaveAppearanceImageAsync(
+                    command,
+                    tenantId,
+                    signatureId,
+                    createdAt,
+                    cancellationToken)
+                .ConfigureAwait(false);
+        }
+
+        try
+        {
+            return PadesAppearanceSettings.Create(
+                visible: true,
+                note: command.SignatureNote,
+                imageFileId: imageFileId,
+                pageNumber: command.AppearancePageNumber < 1 ? 1 : command.AppearancePageNumber);
+        }
+        catch (ArgumentException ex)
+        {
+            throw new SignatureRequestValidationException("SIGNATURE_REQUEST_INVALID", ex.Message);
+        }
+    }
+
+    private async Task<Guid> SaveAppearanceImageAsync(
+        CreateSignatureCommand command,
+        TenantId tenantId,
+        Guid signatureId,
+        DateTimeOffset createdAt,
+        CancellationToken cancellationToken)
+    {
+        var stream = command.AppearanceImage
+            ?? throw new SignatureRequestValidationException(
+                "SIGNATURE_REQUEST_INVALID",
+                "Appearance image stream is missing.");
+
+        if (stream.CanSeek)
+        {
+            stream.Position = 0;
+        }
+
+        await using var buffer = new MemoryStream();
+        await stream.CopyToAsync(buffer, cancellationToken).ConfigureAwait(false);
+        var bytes = buffer.ToArray();
+        if (bytes.Length == 0)
+        {
+            throw new SignatureRequestValidationException(
+                "SIGNATURE_REQUEST_INVALID",
+                "Appearance image must not be empty.");
+        }
+
+        if (bytes.Length > _options.Value.MaxAppearanceImageBytes)
+        {
+            throw new SignatureRequestValidationException(
+                "SIGNATURE_REQUEST_INVALID",
+                $"Appearance image exceeds the maximum size of {_options.Value.MaxAppearanceImageBytes} bytes.");
+        }
+
+        if (!IsAllowedAppearanceImage(bytes))
+        {
+            throw new SignatureRequestValidationException(
+                "SIGNATURE_REQUEST_INVALID",
+                "Appearance image must be JPEG or PNG.");
+        }
+
+        var imageId = Guid.CreateVersion7();
+        var storageKey = SignatureStorageKeys.ForAppearance(tenantId, signatureId, createdAt);
+        var contentType = NormalizeAppearanceContentType(bytes, command.AppearanceImageContentType);
+        var fileName = string.IsNullOrWhiteSpace(command.AppearanceImageFileName)
+            ? "appearance.bin"
+            : Path.GetFileName(command.AppearanceImageFileName.Trim());
+
+        FileStorageMetadata metadata;
+        try
+        {
+            await using var imageStream = new MemoryStream(bytes, writable: false);
+            metadata = await _fileStorage
+                .SaveAsync(storageKey, imageStream, contentType, cancellationToken)
+                .ConfigureAwait(false);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(
+                ex,
+                "Failed to store appearance image for signature {SignatureId}",
+                signatureId);
+            throw;
+        }
+
+        var stored = StoredFile.Create(
+            storageKey: storageKey,
+            originalFileName: fileName,
+            contentType: contentType,
+            size: metadata.Size,
+            sha256: metadata.Sha256,
+            createdAt: createdAt,
+            id: imageId);
+
+        _db.StoredFiles.Add(stored);
+        return imageId;
+    }
+
+    private static bool IsAllowedAppearanceImage(byte[] bytes)
+    {
+        if (bytes.Length >= 2 && bytes[0] == 0xFF && bytes[1] == 0xD8)
+        {
+            return true;
+        }
+
+        ReadOnlySpan<byte> png = [0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A];
+        if (bytes.Length >= 8 && bytes.AsSpan(0, 8).SequenceEqual(png))
+        {
+            return true;
+        }
+
+        return false;
+    }
+
+    private static string NormalizeAppearanceContentType(byte[] bytes, string? contentType)
+    {
+        if (bytes.Length >= 2 && bytes[0] == 0xFF && bytes[1] == 0xD8)
+        {
+            return "image/jpeg";
+        }
+
+        ReadOnlySpan<byte> png = [0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A];
+        if (bytes.Length >= 8 && bytes.AsSpan(0, 8).SequenceEqual(png))
+        {
+            return "image/png";
+        }
+
+        return string.IsNullOrWhiteSpace(contentType) ? "application/octet-stream" : contentType.Trim();
     }
 
     private async Task<SignatureRequest?> FindByIdempotencyKeyAsync(
@@ -405,7 +605,11 @@ public sealed class EfSignatureRequestService : ISignatureRequestService
             request.FailedAt,
             request.ErrorCode?.Value,
             request.ErrorMessage,
-            request.CorrelationId.Value);
+            request.CorrelationId.Value,
+            request.Appearance.Visible,
+            request.Appearance.Note,
+            request.Appearance.PageNumber,
+            request.Appearance.ImageFileId is not null);
 
     private static string StatusUrl(Guid id) => $"/api/v1/signatures/{id:D}";
 

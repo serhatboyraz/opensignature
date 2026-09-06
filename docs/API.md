@@ -54,6 +54,9 @@ Errors use RFC 7807 Problem Details. Machine-readable codes are in the `errorCod
 | `SIGNATURE_ALREADY_COMPLETED` | 409 | Operation conflicts with a completed signature |
 | `SIGNING_OPERATION_FAILED` | 500 / job failure | Unexpected signing or API failure |
 | `SIGNING_PROVIDER_UNSUPPORTED` | job failure | Provider type not implemented for the job |
+| `TIMESTAMP_AUTHORITY_UNAVAILABLE` | job failure | T/LT/LTA requested but no RFC 3161 TSA is configured |
+| `TIMESTAMP_OPERATION_FAILED` | job failure | TSA HTTP/token validation failed (retried, then DLQ) |
+| `SIGNATURE_VALIDATION_DATA_UNAVAILABLE` | job failure | LT/LTA requested but CRL/OCSP evidence is missing |
 
 Clients should treat `errorCode` as stable for branching; `detail` is human-readable and may change.
 
@@ -82,6 +85,10 @@ Creates an asynchronous signing job. The API validates input, stores the file, p
 | `profile` | Yes | `B`, `T`, `LT`, `LTA` |
 | `signingProvider` | Yes | `Pfx`, `Pkcs11`, `SmartCard`, `Hsm` |
 | `certificateThumbprint` | No | Selects a certificate known to the provider (public metadata / thumbprint only) |
+| `visibleSignature` | No | `true` / `false`. PAdES only. Draws a visible stamp on the selected page. |
+| `signatureNote` | No | Optional text on the stamp and PDF `/Reason`. Max 500 characters. PAdES only. Implies visible when set. |
+| `signaturePage` | No | 1-based page number for the stamp (default `1`). PAdES only. |
+| `signatureImage` | No | Optional JPEG or PNG stamp image (max `Signatures:MaxAppearanceImageBytes`, default 2 MiB). Stored separately from the document; never sent on RabbitMQ. PAdES only. Implies visible when set. |
 
 Filenames and client MIME types are untrusted; storage keys are server-generated.
 
@@ -139,6 +146,10 @@ Example `200` body:
   "format": "PAdES",
   "profile": "B",
   "signingProvider": "Pfx",
+  "visibleSignature": false,
+  "signatureNote": null,
+  "appearancePageNumber": 1,
+  "hasAppearanceImage": false,
   "createdAt": "2026-09-05T17:00:00Z",
   "queuedAt": "2026-09-05T17:00:00Z",
   "startedAt": null,
@@ -289,12 +300,12 @@ Returns availability / health for a single provider (reachable, certificate stor
 | Testing | `GET /openapi/v1.json` |
 | Production | Not mapped by default |
 
-The generated document includes signature routes under `/api/v1/signatures`. Certificate and provider paths appear when those endpoint maps are registered.
+The generated document includes signature routes under `/api/v1/signatures` (including `/verification`) and ad-hoc verification under `/api/v1/verifications`. Certificate and provider paths appear when those endpoint maps are registered.
 
 ---
 
 ## Notes
 
 - Document binaries are never placed in RabbitMQ messages; only job/metadata references are queued.
-- Do not silently downgrade a requested signature profile.
-- Validation / verification APIs are a later milestone (see product specification §10).
+- Do not silently downgrade a requested signature profile. T/LT/LTA require worker `Timestamping:Url`; LT/LTA also need CRL or OCSP evidence (`TIMESTAMP_AUTHORITY_UNAVAILABLE` / `SIGNATURE_VALIDATION_DATA_UNAVAILABLE`).
+- Verification covers CAdES, XAdES, PAdES, and ASiC (inner CAdES). Reports are cryptographic + certificate-path checks, not full ETSI EN 319 102-1 AdES conformance.

@@ -49,7 +49,8 @@ OpenSignature **never silently downgrades** a requested profile. Requests for T/
 - **Library choice:** `BouncyCastle.Cryptography` for CMS + purpose-built PDF incremental updater (no iText / AGPL dependency).
 - Validated by re-hashing ByteRange bytes and verifying the embedded detached CMS.
 - Incremental updates preserve the original `/Pages` tree (resolved via classic xref, xref streams, and object streams). A replacement catalog that hardcodes `/Pages 2 0 R` is not used; that previously collapsed real multi-page PDFs to a blank first page.
-- **Gaps:** no visible appearance, no pre-existing signature field reuse, no DSS/VRI, no multiple signatures orchestration beyond incremental append basics.
+- Optional **visible appearance**: when requested, the widget uses a non-zero `/Rect`, a Form XObject `/AP`, page `/Annots`, and stamp text `Digitally signed by {CN}` plus signing time, optional note (`/Reason`), and optional JPEG/PNG image. Default remains invisible (`/Rect [0 0 0 0]`). Appearance images are stored as `appearance.bin` and are never placed on RabbitMQ.
+- **Gaps:** no pre-existing signature field reuse, no DSS/VRI, no multiple signatures orchestration beyond incremental append basics, no interactive page-coordinate placement UI.
 
 ### Orchestration defaults
 

@@ -16,7 +16,10 @@ public interface IPadesBaselineBSigner
         ISigningProvider provider,
         SigningCertificateSelector certificateSelector,
         DigestAlgorithm digestAlgorithm = DigestAlgorithm.Sha256,
-        CancellationToken cancellationToken = default);
+        PadesVisibleAppearance? appearance = null,
+        CancellationToken cancellationToken = default,
+        int? contentsHexLength = null,
+        Func<byte[], CancellationToken, Task<byte[]>>? enhanceCmsAsync = null);
 }
 
 /// <summary>Result of a PAdES-B signature operation.</summary>
@@ -32,12 +35,17 @@ public sealed class PadesBaselineBSigner : IPadesBaselineBSigner
     public const string SubFilter = "ETSI.CAdES.detached";
     public const int ContentsHexLength = PdfByteRangeHelper.DefaultContentsHexLength;
 
+    public const int AdvancedProfileContentsHexLength = 65536;
+
     public async Task<PadesSignatureResult> SignAsync(
         byte[] pdfBytes,
         ISigningProvider provider,
         SigningCertificateSelector certificateSelector,
         DigestAlgorithm digestAlgorithm = DigestAlgorithm.Sha256,
-        CancellationToken cancellationToken = default)
+        PadesVisibleAppearance? appearance = null,
+        CancellationToken cancellationToken = default,
+        int? contentsHexLength = null,
+        Func<byte[], CancellationToken, Task<byte[]>>? enhanceCmsAsync = null)
     {
         ArgumentNullException.ThrowIfNull(pdfBytes);
         ArgumentNullException.ThrowIfNull(provider);
@@ -53,8 +61,14 @@ public sealed class PadesBaselineBSigner : IPadesBaselineBSigner
             throw new InvalidOperationException("Input is not a PDF document.");
         }
 
-        var prepared = BuildIncrementalUpdateWithPlaceholder(pdfBytes, out var updateStart);
-        var placeholder = PdfByteRangeHelper.FindContentsPlaceholder(prepared, ContentsHexLength, updateStart);
+        var hexLength = contentsHexLength ?? ContentsHexLength;
+        var prepared = BuildIncrementalUpdateWithPlaceholder(
+            pdfBytes,
+            appearance,
+            await ResolveSignerNameAsync(provider, certificateSelector, appearance, cancellationToken).ConfigureAwait(false),
+            hexLength,
+            out var updateStart);
+        var placeholder = PdfByteRangeHelper.FindContentsPlaceholder(prepared, hexLength, updateStart);
 
         PdfByteRangeHelper.PatchByteRange(prepared, "/ByteRange", placeholder.ByteRange);
 
@@ -74,6 +88,11 @@ public sealed class PadesBaselineBSigner : IPadesBaselineBSigner
             digestAlgorithm,
             cancellationToken).ConfigureAwait(false);
 
+        if (enhanceCmsAsync is not null)
+        {
+            cms = await enhanceCmsAsync(cms, cancellationToken).ConfigureAwait(false);
+        }
+
         // Sanity: CMS message digest should match our ByteRange digest.
         _ = digest;
 
@@ -89,8 +108,8 @@ public sealed class PadesBaselineBSigner : IPadesBaselineBSigner
     {
         ArgumentNullException.ThrowIfNull(signedPdf);
 
-        var placeholder = PdfByteRangeHelper.FindContentsPlaceholder(signedPdf, ContentsHexLength);
-        var data = ExtractByteRangeBytes(signedPdf, placeholder.ByteRange);
+        var byteRange = PdfByteRangeHelper.ReadStoredByteRange(signedPdf);
+        var data = ExtractByteRangeBytes(signedPdf, byteRange);
         var cms = PdfByteRangeHelper.ExtractCmsFromContents(signedPdf);
         CmsSignatureHelper.ValidateSignedCms(cms, data, verifySignatureOnly);
     }
@@ -138,65 +157,242 @@ public sealed class PadesBaselineBSigner : IPadesBaselineBSigner
         return ms.ToArray();
     }
 
-    private static byte[] BuildIncrementalUpdateWithPlaceholder(byte[] originalPdf, out int updateStart)
+    private static byte[] BuildIncrementalUpdateWithPlaceholder(
+        byte[] originalPdf,
+        PadesVisibleAppearance? appearance,
+        string signerName,
+        int contentsHexLength,
+        out int updateStart)
     {
         var structure = PdfStructure.Load(originalPdf);
-        var nextObj = structure.NextObjectNumber;
+        var signingTimeUtc = DateTimeOffset.UtcNow;
+        var visible = appearance is not null;
+        var pageNumber = appearance?.PageNumber ?? 1;
+        var pageObjNum = visible ? structure.GetPageObjectNumber(pageNumber) : structure.FirstPageObjectNumber;
+        var pageBox = visible ? structure.GetPageBox(pageObjNum) : new PdfRectangle(0, 0, 612, 792);
 
+        PdfImageXObject? image = null;
+        if (visible && appearance!.ImageBytes is { Length: > 0 })
+        {
+            image = PadesAppearanceImage.Decode(appearance.ImageBytes, appearance.ImageContentType);
+        }
+
+        PadesAppearanceResources? appearanceResources = null;
+        if (visible)
+        {
+            appearanceResources = PadesAppearanceBuilder.Build(
+                pageBox,
+                signerName,
+                signingTimeUtc,
+                appearance!.Note,
+                image);
+        }
+
+        var nextObj = structure.NextObjectNumber;
         var sigObjNum = nextObj;
         var widgetObjNum = nextObj + 1;
-        var catalogObjNum = nextObj + 2;
-        var newSize = nextObj + 3;
+        var next = nextObj + 2;
+        int? appearanceObjNum = null;
+        int? imageObjNum = null;
+        if (visible)
+        {
+            appearanceObjNum = next++;
+            if (appearanceResources!.Image is not null)
+            {
+                imageObjNum = next++;
+            }
+        }
 
-        var contentsHex = new string('0', ContentsHexLength);
+        var catalogObjNum = next++;
+        var newSize = Math.Max(structure.Size, next);
+        if (visible)
+        {
+            newSize = Math.Max(newSize, pageObjNum + 1);
+        }
+
+        var contentsHex = new string('0', contentsHexLength);
         var byteRangePlaceholder = "[0000000000 0000000000 0000000000 0000000000]";
-        var signingTime = DateTime.UtcNow.ToString("yyyyMMddHHmmss", CultureInfo.InvariantCulture);
-
-        var update = new StringBuilder();
-        update.Append('\n');
-
-        // Signature dictionary
-        update.Append(CultureInfo.InvariantCulture, $"{sigObjNum} 0 obj\n");
-        update.Append("<< /Type /Sig /Filter /Adobe.PPKLite /SubFilter /");
-        update.Append(SubFilter);
-        update.Append(" /ByteRange ");
-        update.Append(byteRangePlaceholder);
-        update.Append(" /Contents <");
-        update.Append(contentsHex);
-        update.Append("> /M (D:");
-        update.Append(signingTime);
-        update.Append("Z) >>\nendobj\n");
-
-        // Widget annotation attached to a real page from the original page tree.
-        update.Append(CultureInfo.InvariantCulture, $"{widgetObjNum} 0 obj\n");
-        update.Append("<< /Type /Annot /Subtype /Widget /FT /Sig /F 132 /Rect [0 0 0 0] /V ");
-        update.Append(CultureInfo.InvariantCulture, $"{sigObjNum} 0 R ");
-        update.Append(CultureInfo.InvariantCulture, $"/T (OpenSignature1) /P {structure.FirstPageObjectNumber} 0 R >>\nendobj\n");
-
-        // Replacement catalog copies the original Pages tree and other catalog keys.
-        update.Append(CultureInfo.InvariantCulture, $"{catalogObjNum} 0 obj\n");
-        AppendReplacementCatalog(update, structure, widgetObjNum);
-        update.Append("\nendobj\n");
-
-        var updateBytes = Encoding.ASCII.GetBytes(update.ToString());
+        var signingTime = signingTimeUtc.UtcDateTime.ToString("yyyyMMddHHmmss", CultureInfo.InvariantCulture);
 
         using var ms = new MemoryStream();
         ms.Write(originalPdf);
         updateStart = (int)ms.Position;
-        ms.Write(updateBytes);
+        WriteAscii(ms, "\n");
 
-        var asciiUpdate = update.ToString();
-        var sigOffset = updateStart + IndexOfObject(asciiUpdate, sigObjNum);
-        var widgetOffset = updateStart + IndexOfObject(asciiUpdate, widgetObjNum);
-        var catalogOffset = updateStart + IndexOfObject(asciiUpdate, catalogObjNum);
+        var offsets = new SortedDictionary<int, long>();
 
+        offsets[sigObjNum] = ms.Position;
+        WriteAscii(ms, $"{sigObjNum.ToString(CultureInfo.InvariantCulture)} 0 obj\n");
+        WriteAscii(ms, "<< /Type /Sig /Filter /Adobe.PPKLite /SubFilter /");
+        WriteAscii(ms, SubFilter);
+        WriteAscii(ms, " /ByteRange ");
+        WriteAscii(ms, byteRangePlaceholder);
+        WriteAscii(ms, " /Contents <");
+        WriteAscii(ms, contentsHex);
+        WriteAscii(ms, "> /M (D:");
+        WriteAscii(ms, signingTime);
+        WriteAscii(ms, "Z)");
+        if (visible)
+        {
+            WriteAscii(ms, " /Name ");
+            WriteAscii(ms, PdfLiteral.String(signerName));
+            if (!string.IsNullOrWhiteSpace(appearance!.Note))
+            {
+                WriteAscii(ms, " /Reason ");
+                WriteAscii(ms, PdfLiteral.String(appearance.Note));
+            }
+        }
+
+        WriteAscii(ms, " >>\nendobj\n");
+
+        offsets[widgetObjNum] = ms.Position;
+        WriteAscii(ms, $"{widgetObjNum.ToString(CultureInfo.InvariantCulture)} 0 obj\n");
+        WriteAscii(ms, "<< /Type /Annot /Subtype /Widget /FT /Sig /F 132 /Rect ");
+        if (appearanceResources is null)
+        {
+            WriteAscii(ms, "[0 0 0 0]");
+        }
+        else
+        {
+            var rect = appearanceResources.Rect;
+            WriteAscii(
+                ms,
+                $"[{PdfLiteral.Number(rect.Llx)} {PdfLiteral.Number(rect.Lly)} {PdfLiteral.Number(rect.Urx)} {PdfLiteral.Number(rect.Ury)}]");
+        }
+
+        WriteAscii(ms, $" /V {sigObjNum.ToString(CultureInfo.InvariantCulture)} 0 R /T (OpenSignature1) /P {pageObjNum.ToString(CultureInfo.InvariantCulture)} 0 R");
+        if (appearanceObjNum is int apObj)
+        {
+            WriteAscii(ms, $" /AP << /N {apObj.ToString(CultureInfo.InvariantCulture)} 0 R >>");
+        }
+
+        WriteAscii(ms, " >>\nendobj\n");
+
+        if (visible && appearanceObjNum is int appearanceObject && appearanceResources is not null)
+        {
+            offsets[appearanceObject] = ms.Position;
+            WriteFormXObject(ms, appearanceObject, appearanceResources, imageObjNum);
+        }
+
+        if (visible && imageObjNum is int imageObject && appearanceResources?.Image is not null)
+        {
+            offsets[imageObject] = ms.Position;
+            WriteImageXObject(ms, imageObject, appearanceResources.Image);
+        }
+
+        if (visible)
+        {
+            offsets[pageObjNum] = ms.Position;
+            WriteReplacedPage(ms, structure, pageObjNum, widgetObjNum);
+        }
+
+        offsets[catalogObjNum] = ms.Position;
+        WriteAscii(ms, $"{catalogObjNum.ToString(CultureInfo.InvariantCulture)} 0 obj\n");
+        var catalog = new StringBuilder();
+        AppendReplacementCatalog(catalog, structure, widgetObjNum);
+        WriteAscii(ms, catalog.ToString());
+        WriteAscii(ms, "\nendobj\n");
+
+        WriteXref(ms, offsets, newSize, catalogObjNum, structure);
+        return ms.ToArray();
+    }
+
+    private static void WriteFormXObject(
+        MemoryStream ms,
+        int objectNumber,
+        PadesAppearanceResources appearance,
+        int? imageObjectNumber)
+    {
+        var resources = new StringBuilder();
+        resources.Append("/Resources << /Font << /Helv << /Type /Font /Subtype /Type1 /BaseFont /Helvetica /Encoding /WinAnsiEncoding >> >>");
+        if (imageObjectNumber is int imageObj)
+        {
+            resources.Append(CultureInfo.InvariantCulture, $" /XObject << /Im0 {imageObj} 0 R >>");
+        }
+
+        resources.Append(" >>");
+
+        WriteAscii(ms, $"{objectNumber.ToString(CultureInfo.InvariantCulture)} 0 obj\n");
+        WriteAscii(
+            ms,
+            $"<< /Type /XObject /Subtype /Form /BBox [0 0 {PdfLiteral.Number(appearance.BBoxWidth)} {PdfLiteral.Number(appearance.BBoxHeight)}] {resources} /Length {appearance.ContentStream.Length.ToString(CultureInfo.InvariantCulture)} >>\n");
+        WriteAscii(ms, "stream\n");
+        ms.Write(appearance.ContentStream);
+        WriteAscii(ms, "\nendstream\nendobj\n");
+    }
+
+    private static void WriteImageXObject(MemoryStream ms, int objectNumber, PdfImageXObject image)
+    {
+        WriteAscii(ms, $"{objectNumber.ToString(CultureInfo.InvariantCulture)} 0 obj\n");
+        WriteAscii(
+            ms,
+            $"<< /Type /XObject /Subtype /Image /Width {image.Width.ToString(CultureInfo.InvariantCulture)} /Height {image.Height.ToString(CultureInfo.InvariantCulture)} /ColorSpace {image.ColorSpace} /BitsPerComponent 8 /Filter {image.Filter} /Length {image.StreamBytes.Length.ToString(CultureInfo.InvariantCulture)} >>\n");
+        WriteAscii(ms, "stream\n");
+        ms.Write(image.StreamBytes);
+        WriteAscii(ms, "\nendstream\nendobj\n");
+    }
+
+    private static void WriteReplacedPage(
+        MemoryStream ms,
+        PdfStructure structure,
+        int pageObjNum,
+        int widgetObjNum)
+    {
+        var page = structure.GetDictionary(pageObjNum);
+        WriteAscii(ms, $"{pageObjNum.ToString(CultureInfo.InvariantCulture)} 0 obj\n<<");
+        foreach (var (key, value) in page)
+        {
+            if (key is "/Annots")
+            {
+                continue;
+            }
+
+            WriteAscii(ms, " ");
+            WriteAscii(ms, key);
+            WriteAscii(ms, " ");
+            WriteAscii(ms, value);
+        }
+
+        WriteAscii(ms, " /Annots [");
+        foreach (var annot in structure.GetPageAnnotObjectNumbers(pageObjNum))
+        {
+            WriteAscii(ms, $"{annot.ToString(CultureInfo.InvariantCulture)} 0 R ");
+        }
+
+        WriteAscii(ms, $"{widgetObjNum.ToString(CultureInfo.InvariantCulture)} 0 R] >>\nendobj\n");
+    }
+
+    private static void WriteXref(
+        MemoryStream ms,
+        SortedDictionary<int, long> offsets,
+        int newSize,
+        int catalogObjNum,
+        PdfStructure structure)
+    {
         var xrefOffset = ms.Position;
         var xref = new StringBuilder();
         xref.Append("xref\n");
-        xref.Append(CultureInfo.InvariantCulture, $"{sigObjNum} 3\n");
-        xref.Append(CultureInfo.InvariantCulture, $"{sigOffset:D10} 00000 n \n");
-        xref.Append(CultureInfo.InvariantCulture, $"{widgetOffset:D10} 00000 n \n");
-        xref.Append(CultureInfo.InvariantCulture, $"{catalogOffset:D10} 00000 n \n");
+
+        var numbers = offsets.Keys.ToList();
+        var i = 0;
+        while (i < numbers.Count)
+        {
+            var start = numbers[i];
+            var count = 1;
+            while (i + count < numbers.Count && numbers[i + count] == start + count)
+            {
+                count++;
+            }
+
+            xref.Append(CultureInfo.InvariantCulture, $"{start} {count}\n");
+            for (var n = 0; n < count; n++)
+            {
+                xref.Append(CultureInfo.InvariantCulture, $"{offsets[start + n]:D10} 00000 n \n");
+            }
+
+            i += count;
+        }
+
         xref.Append("trailer\n");
         xref.Append("<<");
         xref.Append(CultureInfo.InvariantCulture, $" /Size {newSize} /Root {catalogObjNum} 0 R /Prev {structure.StartXref}");
@@ -206,10 +402,13 @@ public sealed class PadesBaselineBSigner : IPadesBaselineBSigner
         xref.Append("startxref\n");
         xref.Append(CultureInfo.InvariantCulture, $"{xrefOffset}\n");
         xref.Append("%%EOF\n");
+        WriteAscii(ms, xref.ToString());
+    }
 
-        var xrefBytes = Encoding.ASCII.GetBytes(xref.ToString());
-        ms.Write(xrefBytes);
-        return ms.ToArray();
+    private static void WriteAscii(MemoryStream ms, string value)
+    {
+        var bytes = Encoding.ASCII.GetBytes(value);
+        ms.Write(bytes);
     }
 
     private static void AppendReplacementCatalog(StringBuilder update, PdfStructure structure, int widgetObjNum)
@@ -275,16 +474,22 @@ public sealed class PadesBaselineBSigner : IPadesBaselineBSigner
         trailer.Append(value);
     }
 
-    private static long IndexOfObject(string updateAscii, int objectNumber)
+    private static async Task<string> ResolveSignerNameAsync(
+        ISigningProvider provider,
+        SigningCertificateSelector certificateSelector,
+        PadesVisibleAppearance? appearance,
+        CancellationToken cancellationToken)
     {
-        var marker = objectNumber.ToString(CultureInfo.InvariantCulture) + " 0 obj";
-        var index = updateAscii.IndexOf(marker, StringComparison.Ordinal);
-        if (index < 0)
+        if (appearance is null)
         {
-            throw new InvalidOperationException($"Failed to locate object {objectNumber} in incremental update.");
+            return "OpenSignature";
         }
 
-        return index;
+        var certificate = await provider.GetCertificateAsync(certificateSelector, cancellationToken)
+            .ConfigureAwait(false)
+            ?? throw new InvalidOperationException("Signing certificate was not found for the PAdES appearance.");
+
+        return PdfLiteral.CommonNameFromSubject(certificate.Subject);
     }
 
     private static byte[] ExtractByteRangeBytes(byte[] pdf, IReadOnlyList<int> byteRange)

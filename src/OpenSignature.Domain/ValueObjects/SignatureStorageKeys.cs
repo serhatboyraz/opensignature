@@ -9,6 +9,8 @@ public static class SignatureStorageKeys
 
     public const string SignedFileName = "signed.bin";
 
+    public const string AppearanceFileName = "appearance.bin";
+
     /// <summary>
     /// Builds <c>tenants/{tenantId}/signatures/{yyyy}/{MM}/{dd}/{signatureId}/input.bin</c>.
     /// </summary>
@@ -20,6 +22,13 @@ public static class SignatureStorageKeys
     /// </summary>
     public static StorageKey ForSigned(TenantId tenantId, Guid signatureId, DateTimeOffset utcTimestamp)
         => Build(tenantId, signatureId, utcTimestamp, SignedFileName);
+
+    /// <summary>
+    /// Builds <c>tenants/{tenantId}/signatures/{yyyy}/{MM}/{dd}/{signatureId}/appearance.bin</c>.
+    /// Optional visible-signature image; never placed on the signing queue.
+    /// </summary>
+    public static StorageKey ForAppearance(TenantId tenantId, Guid signatureId, DateTimeOffset utcTimestamp)
+        => Build(tenantId, signatureId, utcTimestamp, AppearanceFileName);
 
     private static StorageKey Build(
         TenantId tenantId,

@@ -33,6 +33,7 @@ public static class SignatureEndpoints
             .WithDescription(
                 "Accepts multipart/form-data, stores the input, enqueues asynchronous signing, and returns 202 Accepted. " +
                 "Requires form fields file, format, profile, and signingProvider. " +
+                "Optional PAdES fields: visibleSignature, signatureNote, signaturePage, signatureImage. " +
                 "Optional headers: X-Tenant-Id, Idempotency-Key, X-Correlation-Id.")
             .Produces(StatusCodes.Status202Accepted)
             .ProducesProblem(StatusCodes.Status400BadRequest)
@@ -188,10 +189,23 @@ public static class SignatureEndpoints
             idempotencyKey = idempotencyHeader.ToString();
         }
 
+        bool visibleSignature = ParseBoolean(form["visibleSignature"]);
+        var signatureNote = form["signatureNote"].ToString();
+        var appearancePage = ParsePositiveInt(form["signaturePage"]) ?? 1;
+        var appearanceImage = form.Files.GetFile("signatureImage");
+
+        Stream appearanceImageStream = appearanceImage is { Length: > 0 }
+            ? appearanceImage.OpenReadStream()
+            : Stream.Null;
+        string? appearanceImageFileName = appearanceImage is { Length: > 0 } ? appearanceImage.FileName : null;
+        string? appearanceImageContentType = appearanceImage is { Length: > 0 } ? appearanceImage.ContentType : null;
+
         await using var content = file.OpenReadStream();
-        try
+        await using (appearanceImageStream)
         {
-            var result = await signatureRequests.CreateAsync(
+            try
+            {
+                var result = await signatureRequests.CreateAsync(
                     new CreateSignatureCommand
                     {
                         TenantId = tenantId,
@@ -204,6 +218,12 @@ public static class SignatureEndpoints
                         Profile = profile,
                         SigningProvider = signingProvider,
                         CertificateThumbprint = form["certificateThumbprint"].ToString(),
+                        VisibleSignature = visibleSignature,
+                        SignatureNote = signatureNote,
+                        AppearancePageNumber = appearancePage,
+                        AppearanceImage = appearanceImage is { Length: > 0 } ? appearanceImageStream : null,
+                        AppearanceImageFileName = appearanceImageFileName,
+                        AppearanceImageContentType = appearanceImageContentType,
                         IdempotencyKey = idempotencyKey,
                         CorrelationId = correlationId,
                         CreatedBy = "api"
@@ -211,23 +231,24 @@ public static class SignatureEndpoints
                     cancellationToken)
                 .ConfigureAwait(false);
 
-            return Results.Accepted(
-                result.StatusUrl,
-                new
-                {
-                    id = result.Id,
-                    status = result.Status.ToString(),
-                    createdAt = result.CreatedAt,
-                    statusUrl = result.StatusUrl
-                });
-        }
-        catch (SignatureRequestValidationException ex)
-        {
-            return Problem(
-                statusCode: StatusCodes.Status400BadRequest,
-                title: "Invalid signature request",
-                detail: ex.Detail,
-                errorCode: ex.ErrorCode);
+                return Results.Accepted(
+                    result.StatusUrl,
+                    new
+                    {
+                        id = result.Id,
+                        status = result.Status.ToString(),
+                        createdAt = result.CreatedAt,
+                        statusUrl = result.StatusUrl
+                    });
+            }
+            catch (SignatureRequestValidationException ex)
+            {
+                return Problem(
+                    statusCode: StatusCodes.Status400BadRequest,
+                    title: "Invalid signature request",
+                    detail: ex.Detail,
+                    errorCode: ex.ErrorCode);
+            }
         }
     }
 
@@ -396,6 +417,32 @@ public static class SignatureEndpoints
         return Enum.TryParse(value.Trim(), ignoreCase: true, out result) && Enum.IsDefined(result);
     }
 
+    private static bool ParseBoolean(string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+        {
+            return false;
+        }
+
+        return value.Trim() is "1" or "true" or "True" or "TRUE" or "yes" or "on";
+    }
+
+    private static int? ParsePositiveInt(string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+        {
+            return null;
+        }
+
+        if (!int.TryParse(value.Trim(), NumberStyles.Integer, CultureInfo.InvariantCulture, out var parsed)
+            || parsed < 1)
+        {
+            return null;
+        }
+
+        return parsed;
+    }
+
     private static object ToResponse(SignatureRequestStatusDto dto) => new
     {
         id = dto.Id,
@@ -404,6 +451,10 @@ public static class SignatureEndpoints
         format = dto.Format.ToString(),
         profile = dto.Profile.ToString(),
         signingProvider = dto.SigningProvider.ToString(),
+        visibleSignature = dto.VisibleSignature,
+        signatureNote = dto.SignatureNote,
+        appearancePageNumber = dto.AppearancePageNumber,
+        hasAppearanceImage = dto.HasAppearanceImage,
         createdAt = dto.CreatedAt,
         queuedAt = dto.QueuedAt,
         startedAt = dto.StartedAt,

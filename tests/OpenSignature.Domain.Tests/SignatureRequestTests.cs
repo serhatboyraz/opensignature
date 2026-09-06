@@ -43,6 +43,39 @@ public sealed class SignatureRequestTests
         Assert.Throws<DomainException>(() => request.MarkCompleted(Guid.CreateVersion7()));
     }
 
+    [Fact]
+    public void Create_stores_visible_appearance()
+    {
+        var imageId = Guid.CreateVersion7();
+        var appearance = PadesAppearanceSettings.Create(
+            visible: true,
+            note: "Approved",
+            imageFileId: imageId,
+            pageNumber: 2);
+
+        var request = SignatureRequest.Create(
+            tenantId: TenantId.Create("tenant-001"),
+            correlationId: CorrelationId.Create("corr-001"),
+            format: SignatureFormat.PAdES,
+            profile: SignatureProfile.B,
+            inputFileId: Guid.CreateVersion7(),
+            signingProvider: SigningProviderType.Pfx,
+            createdBy: "tests",
+            appearance: appearance);
+
+        Assert.True(request.Appearance.Visible);
+        Assert.Equal("Approved", request.Appearance.Note);
+        Assert.Equal(imageId, request.Appearance.ImageFileId);
+        Assert.Equal(2, request.Appearance.PageNumber);
+    }
+
+    [Fact]
+    public void Appearance_rejects_note_that_is_too_long()
+    {
+        Assert.Throws<ArgumentException>(() =>
+            PadesAppearanceSettings.Create(visible: true, note: new string('x', 501)));
+    }
+
     private static SignatureRequest CreateRequest(Guid? inputFileId = null)
         => SignatureRequest.Create(
             tenantId: TenantId.Create("tenant-001"),

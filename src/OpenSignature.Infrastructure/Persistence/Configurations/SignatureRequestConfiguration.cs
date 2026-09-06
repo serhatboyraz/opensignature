@@ -1,6 +1,7 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Metadata.Builders;
 using OpenSignature.Domain.Entities;
+using OpenSignature.Domain.ValueObjects;
 
 namespace OpenSignature.Infrastructure.Persistence.Configurations;
 
@@ -73,6 +74,27 @@ internal sealed class SignatureRequestConfiguration : IEntityTypeConfiguration<S
 
         builder.Property(e => e.IdempotencyKey)
             .HasMaxLength(256);
+
+        builder.OwnsOne(e => e.Appearance, appearance =>
+        {
+            appearance.Property(a => a.Visible)
+                .HasColumnName("VisibleSignature")
+                .IsRequired();
+
+            appearance.Property(a => a.Note)
+                .HasColumnName("SignatureNote")
+                .HasMaxLength(PadesAppearanceSettings.MaxNoteLength);
+
+            appearance.Property(a => a.ImageFileId)
+                .HasColumnName("AppearanceImageFileId");
+
+            appearance.Property(a => a.PageNumber)
+                .HasColumnName("AppearancePageNumber")
+                .IsRequired()
+                .HasDefaultValue(PadesAppearanceSettings.DefaultPageNumber);
+        });
+
+        builder.Navigation(e => e.Appearance).IsRequired();
 
         builder.HasIndex(e => new { e.TenantId, e.IdempotencyKey })
             .IsUnique()

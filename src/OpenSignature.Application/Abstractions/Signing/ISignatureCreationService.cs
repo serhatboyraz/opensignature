@@ -19,6 +19,7 @@ public interface ISignatureCreationService
     /// <param name="providerType">Signing provider category.</param>
     /// <param name="certificateSelector">Optional certificate selection criteria; null lets the implementation choose a default when allowed.</param>
     /// <param name="cancellationToken">Cancellation token.</param>
+    /// <param name="appearance">Optional visible PAdES appearance. Null means invisible. Non-PAdES formats reject a visible appearance.</param>
     /// <returns>Signed document content and suggested content type.</returns>
     Task<SignatureCreationResult> SignAsync(
         Stream inputStream,
@@ -26,5 +27,6 @@ public interface ISignatureCreationService
         SignatureProfile profile,
         SigningProviderType providerType,
         SigningCertificateSelector? certificateSelector,
-        CancellationToken cancellationToken = default);
+        CancellationToken cancellationToken = default,
+        SignatureAppearanceOptions? appearance = null);
 }
