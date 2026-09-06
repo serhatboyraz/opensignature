@@ -11,6 +11,7 @@ using OpenSignature.Signing.Hsm;
 using OpenSignature.Signing.Orchestration;
 using OpenSignature.Signing.Pfx;
 using OpenSignature.Signing.Pkcs11;
+using OpenSignature.Signing.Pkcs11.Native;
 using OpenSignature.Signing.SmartCard;
 
 namespace OpenSignature.Signing;
@@ -60,7 +61,8 @@ public static class SigningServiceCollectionExtensions
 
     /// <summary>
     /// Registers <see cref="SmartCardSigningProvider"/> as a singleton <see cref="ISigningProvider"/>.
-    /// Requires a registered <see cref="IPkcs11LibraryFactory"/> (use mock factory in tests; no real hardware in CI).
+    /// Registers <see cref="OpenSignature.Signing.Pkcs11.Native.NativePkcs11LibraryFactory"/> when no <see cref="IPkcs11LibraryFactory"/> exists
+    /// (tests should register a mock factory first).
     /// PIN is resolved via <see cref="Pkcs11.Pkcs11ProviderOptionsBase.PinSecretName"/> and <see cref="ISigningSecretProvider"/>.
     /// </summary>
     public static IServiceCollection AddSmartCardSigningProvider(
@@ -73,6 +75,7 @@ public static class SigningServiceCollectionExtensions
 
         services.Configure(configure);
         RegisterSigningSecrets(services, secrets);
+        services.TryAddSingleton<IPkcs11LibraryFactory, NativePkcs11LibraryFactory>();
         services.AddSingleton<ISigningProvider, SmartCardSigningProvider>();
         services.AddSigningProviderResolver();
         return services;
@@ -80,7 +83,8 @@ public static class SigningServiceCollectionExtensions
 
     /// <summary>
     /// Registers <see cref="HsmSigningProvider"/> as a singleton <see cref="ISigningProvider"/>.
-    /// Requires a registered <see cref="IPkcs11LibraryFactory"/> (use mock factory in tests; no real hardware in CI).
+    /// Registers <see cref="OpenSignature.Signing.Pkcs11.Native.NativePkcs11LibraryFactory"/> when no <see cref="IPkcs11LibraryFactory"/> exists
+    /// (tests should register a mock factory first).
     /// PIN is resolved via <see cref="Pkcs11.Pkcs11ProviderOptionsBase.PinSecretName"/> and <see cref="ISigningSecretProvider"/>.
     /// </summary>
     public static IServiceCollection AddHsmSigningProvider(
@@ -93,9 +97,57 @@ public static class SigningServiceCollectionExtensions
 
         services.Configure(configure);
         RegisterSigningSecrets(services, secrets);
+        services.TryAddSingleton<IPkcs11LibraryFactory, NativePkcs11LibraryFactory>();
         services.AddSingleton<ISigningProvider, HsmSigningProvider>();
         services.AddSigningProviderResolver();
         return services;
+    }
+
+    /// <summary>
+    /// Registers SmartCard and/or HSM providers from already-bound options.
+    /// Applies USB-token PKCS#11 auto-detect for SmartCard when enabled.
+    /// Skips registration when the module path remains empty.
+    /// </summary>
+    public static IServiceCollection AddHardwareSigningProviders(
+        this IServiceCollection services,
+        SmartCardSigningProviderOptions? smartCard = null,
+        HsmSigningProviderOptions? hsm = null)
+    {
+        ArgumentNullException.ThrowIfNull(services);
+
+        if (smartCard is not null)
+        {
+            WellKnownPkcs11Modules.ApplyAutoDetect(smartCard);
+            if (!string.IsNullOrWhiteSpace(smartCard.ModulePath))
+            {
+                var captured = smartCard;
+                services.AddSmartCardSigningProvider(options => CopyPkcs11Options(captured, options));
+            }
+        }
+
+        if (hsm is not null && !string.IsNullOrWhiteSpace(hsm.ModulePath))
+        {
+            var captured = hsm;
+            services.AddHsmSigningProvider(options =>
+            {
+                CopyPkcs11Options(captured, options);
+                options.MaxConcurrentSessions = captured.MaxConcurrentSessions;
+            });
+        }
+
+        return services;
+    }
+
+    private static void CopyPkcs11Options(Pkcs11ProviderOptionsBase source, Pkcs11ProviderOptionsBase target)
+    {
+        target.ProviderId = source.ProviderId;
+        target.Name = source.Name;
+        target.ModulePath = source.ModulePath;
+        target.SlotId = source.SlotId;
+        target.TokenLabel = source.TokenLabel;
+        target.PinSecretName = source.PinSecretName;
+        target.CertificateLabel = source.CertificateLabel;
+        target.CertificateIdHex = source.CertificateIdHex;
     }
 
     private static void RegisterSigningSecrets(

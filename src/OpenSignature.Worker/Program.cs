@@ -5,7 +5,9 @@ using OpenSignature.Infrastructure.Messaging;
 using OpenSignature.Infrastructure.Secrets;
 using OpenSignature.Infrastructure.Storage;
 using OpenSignature.Signing;
+using OpenSignature.Signing.Hsm;
 using OpenSignature.Signing.Pfx;
+using OpenSignature.Signing.SmartCard;
 using OpenSignature.Signing.Timestamping;
 using OpenSignature.Worker.Messaging;
 
@@ -42,6 +44,14 @@ builder.Services.AddSignatureEngine(options =>
             Path.Combine(builder.Environment.ContentRootPath, "..", "..", options.Path.Replace("./", string.Empty)));
     }
 });
+builder.Services.Configure<SigningOptions>(
+    builder.Configuration.GetSection(SigningOptions.SectionName));
+
+var smartCard = new SmartCardSigningProviderOptions();
+builder.Configuration.GetSection(SmartCardSigningProviderOptions.SectionName).Bind(smartCard);
+var hsm = new HsmSigningProviderOptions();
+builder.Configuration.GetSection(HsmSigningProviderOptions.SectionName).Bind(hsm);
+builder.Services.AddHardwareSigningProviders(smartCard, hsm);
 
 var timestamping = builder.Configuration.GetSection(Rfc3161TimestampAuthorityOptions.SectionName);
 if (!string.IsNullOrWhiteSpace(timestamping["Url"]))

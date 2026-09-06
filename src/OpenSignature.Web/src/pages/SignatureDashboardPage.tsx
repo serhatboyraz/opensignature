@@ -1,9 +1,16 @@
-import { useMutation, useQueries, useQueryClient } from '@tanstack/react-query'
-import { useState, type FormEvent } from 'react'
+import { useMutation, useQueries, useQuery, useQueryClient } from '@tanstack/react-query'
+import { useEffect, useMemo, useState, type FormEvent } from 'react'
 import { Link } from 'react-router-dom'
-import { ApiError } from '../api/types'
+import { listCertificates, listProviders } from '../api/providers'
 import { createSignature, getSignature } from '../api/signatures'
-import type { SignatureFormat, SignatureProfile, SigningProviderType } from '../api/types'
+import { ApiError } from '../api/types'
+import type {
+  CertificateListItem,
+  ProviderListItem,
+  SignatureFormat,
+  SignatureProfile,
+  SigningProviderType,
+} from '../api/types'
 import { StatusBadge } from '../components/StatusBadge'
 import { formatDateTime, isTerminalStatus, shortId } from '../lib/format'
 import {
@@ -11,10 +18,11 @@ import {
   readTrackedSignatureIds,
   trackSignatureId,
 } from '../lib/sessionSignatures'
+import { certificateOptionKey, parseSigningProviderType } from '../lib/signingProviders'
 
 const FORMATS: SignatureFormat[] = ['PAdES', 'XAdES', 'CAdES', 'ASiC_S', 'ASiC_E']
 const PROFILES: SignatureProfile[] = ['B', 'T', 'LT', 'LTA']
-const PROVIDERS: SigningProviderType[] = ['Pfx', 'Pkcs11', 'SmartCard', 'Hsm']
+const CERT_DEFAULT = 'default'
 
 interface SignatureDashboardPageProps {
   title: string
@@ -27,13 +35,57 @@ export function SignatureDashboardPage({ title, intro }: SignatureDashboardPageP
   const [file, setFile] = useState<File | null>(null)
   const [format, setFormat] = useState<SignatureFormat>('PAdES')
   const [profile, setProfile] = useState<SignatureProfile>('B')
-  const [signingProvider, setSigningProvider] = useState<SigningProviderType>('Pfx')
-  const [certificateThumbprint, setCertificateThumbprint] = useState('')
+  const [selectedProviderId, setSelectedProviderId] = useState('')
+  const [selectedCertKey, setSelectedCertKey] = useState<string | null>(null)
   const [visibleSignature, setVisibleSignature] = useState(false)
   const [signatureNote, setSignatureNote] = useState('')
   const [signaturePage, setSignaturePage] = useState('1')
   const [signatureImage, setSignatureImage] = useState<File | null>(null)
   const [formError, setFormError] = useState<string | null>(null)
+
+  const providersQuery = useQuery({
+    queryKey: ['providers'],
+    queryFn: listProviders,
+    staleTime: 30_000,
+  })
+  const certificatesQuery = useQuery({
+    queryKey: ['certificates'],
+    queryFn: listCertificates,
+    staleTime: 15_000,
+  })
+
+  const providers = providersQuery.data ?? []
+  const certificates = certificatesQuery.data ?? []
+  const selectedProvider = providers.find((provider) => provider.id === selectedProviderId) ?? null
+  const providerCertificates = useMemo(
+    () => certificates.filter((certificate) => certificate.providerId === selectedProviderId),
+    [certificates, selectedProviderId],
+  )
+  const selectedCertificate = providerCertificates.find(
+    (certificate) => certificateOptionKey(certificate.providerId, certificate.thumbprint) === selectedCertKey,
+  )
+
+  useEffect(() => {
+    if (selectedProviderId || providers.length === 0) {
+      return
+    }
+
+    setSelectedProviderId(providers[0].id)
+    setSelectedCertKey(null)
+  }, [providers, selectedProviderId])
+
+  useEffect(() => {
+    if (selectedCertKey !== null || !selectedProviderId || !certificatesQuery.isSuccess) {
+      return
+    }
+
+    const firstSignable = providerCertificates.find((certificate) => certificate.canSign)
+    setSelectedCertKey(
+      firstSignable
+        ? certificateOptionKey(firstSignable.providerId, firstSignable.thumbprint)
+        : CERT_DEFAULT,
+    )
+  }, [certificatesQuery.isSuccess, providerCertificates, selectedCertKey, selectedProviderId])
 
   const statusQueries = useQueries({
     queries: trackedIds.map((id) => ({
@@ -67,12 +119,32 @@ export function SignatureDashboardPage({ title, intro }: SignatureDashboardPageP
     },
   })
 
+  function onProviderChange(providerId: string) {
+    setSelectedProviderId(providerId)
+    setSelectedCertKey(null)
+    setFormError(null)
+  }
+
   function onSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
     if (!file) {
       setFormError('Choose a file to sign.')
       return
     }
+
+    const signingProvider = resolveProviderType(selectedProvider)
+    if (!signingProvider) {
+      setFormError('Choose a registered signing provider.')
+      return
+    }
+
+    if (selectedCertificate && !selectedCertificate.canSign) {
+      setFormError(
+        'The selected certificate cannot sign. Choose a certificate with Can sign = Yes, or check the token PIN and validity.',
+      )
+      return
+    }
+
     if (format === 'PAdES' && visibleSignature) {
       const page = Number.parseInt(signaturePage, 10)
       if (!Number.isInteger(page) || page < 1) {
@@ -80,12 +152,16 @@ export function SignatureDashboardPage({ title, intro }: SignatureDashboardPageP
         return
       }
     }
+
     createMutation.mutate({
       file,
       format,
       profile,
       signingProvider,
-      certificateThumbprint: certificateThumbprint || undefined,
+      certificateThumbprint:
+        selectedCertificate && selectedCertKey !== CERT_DEFAULT
+          ? selectedCertificate.thumbprint
+          : undefined,
       visibleSignature: format === 'PAdES' && visibleSignature,
       signatureNote: format === 'PAdES' && visibleSignature ? signatureNote || undefined : undefined,
       signaturePage:
@@ -100,6 +176,22 @@ export function SignatureDashboardPage({ title, intro }: SignatureDashboardPageP
     clearTrackedSignatureIds()
     setTrackedIds([])
   }
+
+  const providersError =
+    providersQuery.error instanceof ApiError
+      ? `${providersQuery.error.errorCode ?? 'ERROR'}: ${providersQuery.error.message}`
+      : providersQuery.error instanceof Error
+        ? providersQuery.error.message
+        : null
+  const certificatesError =
+    certificatesQuery.error instanceof ApiError
+      ? `${certificatesQuery.error.errorCode ?? 'ERROR'}: ${certificatesQuery.error.message}`
+      : certificatesQuery.error instanceof Error
+        ? certificatesQuery.error.message
+        : null
+
+  const isHardwareProvider =
+    selectedProvider?.providerType === 'SmartCard' || selectedProvider?.providerType === 'Pkcs11'
 
   return (
     <section className="page">
@@ -145,17 +237,23 @@ export function SignatureDashboardPage({ title, intro }: SignatureDashboardPageP
             <label className="field">
               <span>Provider</span>
               <select
-                value={signingProvider}
-                onChange={(e) => setSigningProvider(e.target.value as SigningProviderType)}
+                value={selectedProviderId}
+                onChange={(e) => onProviderChange(e.target.value)}
+                disabled={providersQuery.isLoading || providers.length === 0}
               >
-                {PROVIDERS.map((value) => (
-                  <option key={value} value={value}>
-                    {value}
-                  </option>
-                ))}
+                {providers.length === 0 ? (
+                  <option value="">No providers registered</option>
+                ) : (
+                  providers.map((provider) => (
+                    <option key={provider.id} value={provider.id}>
+                      {provider.name} ({provider.providerType})
+                    </option>
+                  ))
+                )}
               </select>
             </label>
           </div>
+          {providersError ? <p className="error-text">{providersError}</p> : null}
           {profile !== 'B' ? (
             <p className="empty">
               T, LT, and LTA require a configured RFC 3161 timestamp authority. LT and LTA also
@@ -163,15 +261,71 @@ export function SignatureDashboardPage({ title, intro }: SignatureDashboardPageP
             </p>
           ) : null}
           <label className="field">
-            <span>Certificate thumbprint (optional)</span>
-            <input
-              type="text"
-              value={certificateThumbprint}
-              onChange={(e) => setCertificateThumbprint(e.target.value)}
-              placeholder="Leave blank for provider default"
-              autoComplete="off"
-            />
+            <span>Certificate</span>
+            <select
+              value={selectedCertKey ?? ''}
+              onChange={(e) => setSelectedCertKey(e.target.value || CERT_DEFAULT)}
+              disabled={!selectedProviderId || certificatesQuery.isLoading}
+            >
+              <option value={CERT_DEFAULT}>Use provider default (first signable certificate)</option>
+              {providerCertificates.map((certificate) => (
+                <option
+                  key={certificateOptionKey(certificate.providerId, certificate.thumbprint)}
+                  value={certificateOptionKey(certificate.providerId, certificate.thumbprint)}
+                  disabled={!certificate.canSign}
+                >
+                  {certificateLabel(certificate)}
+                </option>
+              ))}
+            </select>
           </label>
+          {certificatesQuery.isLoading ? <p className="muted">Loading certificates…</p> : null}
+          {certificatesError ? <p className="error-text">{certificatesError}</p> : null}
+          {certificatesQuery.isSuccess && selectedProviderId && providerCertificates.length === 0 ? (
+            <p className="empty">
+              No certificates were returned for this provider.{' '}
+              {isHardwareProvider ? (
+                <>
+                  Confirm the USB token is plugged in, PKCS#11 middleware is installed, and the PIN
+                  is set in user secrets (listing logs in). See{' '}
+                  <Link to="/providers">Providers</Link>.
+                </>
+              ) : (
+                <>
+                  Check the <Link to="/certificates">Certificates</Link> page.
+                </>
+              )}
+            </p>
+          ) : null}
+          {selectedCertificate ? (
+            <dl className="cert-details">
+              <div>
+                <dt>Subject</dt>
+                <dd>{selectedCertificate.subject}</dd>
+              </div>
+              <div>
+                <dt>Thumbprint</dt>
+                <dd className="mono small wrap">{selectedCertificate.thumbprint}</dd>
+              </div>
+              <div>
+                <dt>Valid until</dt>
+                <dd>
+                  {formatDateTime(selectedCertificate.notAfter)}
+                  {selectedCertificate.isCurrentlyValid ? '' : ' (expired or not yet valid)'}
+                </dd>
+              </div>
+              <div>
+                <dt>Can sign</dt>
+                <dd>{selectedCertificate.canSign ? 'Yes' : 'No'}</dd>
+              </div>
+            </dl>
+          ) : (
+            <p className="note">
+              Choose a certificate from the selected provider. USB tokens appear under SmartCard.
+              The worker uses this thumbprint, so a PFX certificate cannot be used with a USB
+              provider.
+            </p>
+          )}
           {format === 'PAdES' ? (
             <fieldset className="appearance-fields">
               <legend>Visible PDF appearance</legend>
@@ -277,4 +431,15 @@ export function SignatureDashboardPage({ title, intro }: SignatureDashboardPageP
       </div>
     </section>
   )
+}
+
+function resolveProviderType(provider: ProviderListItem | null): SigningProviderType | null {
+  return parseSigningProviderType(provider?.providerType)
+}
+
+function certificateLabel(certificate: CertificateListItem): string {
+  const name = certificate.friendlyName?.trim() || certificate.subject
+  const signable = certificate.canSign ? 'can sign' : 'cannot sign'
+  const validity = certificate.isCurrentlyValid ? 'valid' : 'not valid'
+  return `${name} — ${signable}, ${validity}`
 }

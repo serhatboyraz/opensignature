@@ -16,7 +16,8 @@ internal static class Pkcs11CertificateMapper
         ulong slotId,
         string providerScheme,
         int index,
-        DateTimeOffset asOf)
+        DateTimeOffset asOf,
+        bool allowExpiredCertificates = false)
     {
         ArgumentNullException.ThrowIfNull(certificateObject);
 
@@ -25,6 +26,7 @@ internal static class Pkcs11CertificateMapper
         var notBefore = new DateTimeOffset(certificate.NotBefore.ToUniversalTime());
         var notAfter = new DateTimeOffset(certificate.NotAfter.ToUniversalTime());
         var currentlyValid = asOf >= notBefore && asOf <= notAfter;
+        var allowedForSigning = allowExpiredCertificates || currentlyValid;
 
         string? publicKeyAlgorithm = null;
         int? keySizeBits = null;
@@ -44,7 +46,7 @@ internal static class Pkcs11CertificateMapper
         }
 
         var canSign = certificateObject.HasMatchingPrivateKey
-            && currentlyValid
+            && allowedForSigning
             && publicKeyAlgorithm is not null;
 
         var labelPart = certificateObject.Label ?? thumbprint.Value;
@@ -65,6 +67,43 @@ internal static class Pkcs11CertificateMapper
             keySizeBits: keySizeBits,
             keyUsages: ReadKeyUsages(certificate),
             enhancedKeyUsages: ReadEnhancedKeyUsages(certificate));
+    }
+
+    /// <summary>
+    /// Maps token certificate objects to public metadata, skipping objects whose DER is not a usable X.509 certificate.
+    /// Returned pairs stay aligned so private-key lookup can use the original PKCS#11 object.
+    /// </summary>
+    public static IReadOnlyList<(Pkcs11CertificateObject Object, CertificateInfo Info)> MapAll(
+        IReadOnlyList<Pkcs11CertificateObject> objects,
+        ulong slotId,
+        string providerScheme,
+        DateTimeOffset asOf,
+        bool allowExpiredCertificates = false)
+    {
+        ArgumentNullException.ThrowIfNull(objects);
+
+        var result = new List<(Pkcs11CertificateObject Object, CertificateInfo Info)>(objects.Count);
+        for (var i = 0; i < objects.Count; i++)
+        {
+            try
+            {
+                result.Add((
+                    objects[i],
+                    ToCertificateInfo(
+                        objects[i],
+                        slotId,
+                        providerScheme,
+                        i,
+                        asOf,
+                        allowExpiredCertificates)));
+            }
+            catch (Exception ex) when (ex is CryptographicException or ArgumentException or InvalidOperationException)
+            {
+                // Vendor tokens sometimes expose non-X.509 or truncated CKA_VALUE objects.
+            }
+        }
+
+        return result;
     }
 
     public static bool Matches(CertificateInfo certificate, SigningCertificateSelector selector)

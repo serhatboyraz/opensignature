@@ -45,6 +45,8 @@ public static class CmsSignatureHelper
                 "Selected certificate cannot sign (missing private key capability, unsupported algorithm, or outside validity window).");
         }
 
+        // Calendar validity is enforced by the provider via CanSign unless Signing:AllowExpiredCertificates is true.
+
         if (info.PublicCertificateDer.Count == 0)
         {
             throw new InvalidOperationException("Selected certificate does not expose public DER material.");
@@ -55,10 +57,6 @@ public static class CmsSignatureHelper
             : info.PublicCertificateDer.ToArray();
 
         using var dotNetCert = CertificateHelper.LoadPublic(publicDer);
-        if (!CertificateHelper.IsCurrentlyValid(dotNetCert))
-        {
-            throw new InvalidOperationException("Signing certificate is outside its validity window.");
-        }
 
         var bcCert = new X509CertificateParser().ReadCertificate(publicDer);
         var signatureAlgorithm = ResolveSignatureAlgorithm(dotNetCert, digestAlgorithm);

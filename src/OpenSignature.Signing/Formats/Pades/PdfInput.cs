@@ -416,7 +416,7 @@ internal sealed class PdfInput
         b is (byte)'(' or (byte)')' or (byte)'<' or (byte)'>' or (byte)'[' or (byte)']'
             or (byte)'{' or (byte)'}' or (byte)'/' or (byte)'%';
 
-    private static bool IsDigit(byte b) => b is >= (byte)'0' and <= (byte)'9';
+    public static bool IsDigit(byte b) => b is >= (byte)'0' and <= (byte)'9';
 
     private static bool IsHex(byte b) =>
         b is >= (byte)'0' and <= (byte)'9'

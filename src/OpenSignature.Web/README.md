@@ -22,8 +22,13 @@ React administration/demo UI for **OpenSignature**.
 
 ## Run locally
 
-1. Start the API (`OpenSignature.Api`) — default HTTPS profile listens on **https://localhost:7010** (`Properties/launchSettings.json`).
-2. From this folder:
+From the repository root, start the API, worker, and this UI together:
+
+```bash
+pwsh ./scripts/Start-Development.ps1
+```
+
+Or start only the UI after the API is already running (`http://localhost:5270` by default):
 
 ```bash
 npm install
@@ -32,7 +37,7 @@ npm run dev
 
 Open http://localhost:5173
 
-By default `.env.development` leaves `VITE_API_BASE_URL` empty so `/api` requests go through the Vite proxy to `https://localhost:7010` (avoids browser CORS and self-signed certificate issues).
+By default `.env.development` leaves `VITE_API_BASE_URL` empty so `/api` requests go through the Vite proxy to `http://localhost:5270` (avoids browser CORS).
 
 ### Environment
 
@@ -40,10 +45,10 @@ See `.env.example`:
 
 | Variable | Meaning |
 |----------|---------|
-| `VITE_API_BASE_URL` | API origin (no trailing slash). Unset → `https://localhost:7010`. Empty → same-origin / proxy. |
+| `VITE_API_BASE_URL` | API origin (no trailing slash). Unset/empty → same-origin / Vite proxy. |
 | `VITE_TENANT_ID` | Optional `X-Tenant-Id` header |
 | `VITE_API_KEY` | Optional `X-Api-Key` header |
-| `VITE_PROXY_TARGET` | Vite proxy target (dev server only), default `https://localhost:7010` |
+| `VITE_PROXY_TARGET` | Vite proxy target (dev server only), default `http://localhost:5270` |
 
 ## Build
 

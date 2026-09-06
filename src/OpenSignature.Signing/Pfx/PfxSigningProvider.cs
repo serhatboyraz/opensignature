@@ -15,21 +15,28 @@ namespace OpenSignature.Signing.Pfx;
 public sealed class PfxSigningProvider : ISigningProvider
 {
     private readonly List<LoadedEntry> _entries = [];
+    private readonly SigningOptions _signingOptions;
     private readonly string? _loadFailureDetail;
     private bool _disposed;
 
     public PfxSigningProvider(
         IOptions<PfxSigningProviderOptions> options,
-        ISigningSecretProvider? secretProvider = null)
-        : this(options?.Value ?? throw new ArgumentNullException(nameof(options)), secretProvider)
+        ISigningSecretProvider? secretProvider = null,
+        IOptions<SigningOptions>? signingOptions = null)
+        : this(
+            options?.Value ?? throw new ArgumentNullException(nameof(options)),
+            secretProvider,
+            signingOptions?.Value)
     {
     }
 
     public PfxSigningProvider(
         PfxSigningProviderOptions options,
-        ISigningSecretProvider? secretProvider = null)
+        ISigningSecretProvider? secretProvider = null,
+        SigningOptions? signingOptions = null)
     {
         ArgumentNullException.ThrowIfNull(options);
+        _signingOptions = signingOptions ?? new SigningOptions();
 
         if (string.IsNullOrWhiteSpace(options.ProviderId))
         {
@@ -214,7 +221,7 @@ public sealed class PfxSigningProvider : ISigningProvider
         {
             foreach (var certificate in collection)
             {
-                var info = CreateCertificateInfo(certificate, index, now);
+                var info = CreateCertificateInfo(certificate, index, now, _signingOptions);
                 _entries.Add(new LoadedEntry(info, certificate));
                 index++;
             }
@@ -237,12 +244,13 @@ public sealed class PfxSigningProvider : ISigningProvider
     private static CertificateInfo CreateCertificateInfo(
         X509Certificate2 certificate,
         int index,
-        DateTimeOffset asOf)
+        DateTimeOffset asOf,
+        SigningOptions signingOptions)
     {
         var thumbprint = CertificateThumbprint.Create(certificate.Thumbprint);
         var notBefore = new DateTimeOffset(certificate.NotBefore.ToUniversalTime());
         var notAfter = new DateTimeOffset(certificate.NotAfter.ToUniversalTime());
-        var currentlyValid = asOf >= notBefore && asOf <= notAfter;
+        var allowedForSigning = signingOptions.AllowsSigningAt(notBefore, notAfter, asOf);
 
         string? publicKeyAlgorithm = null;
         int? keySizeBits = null;
@@ -281,7 +289,7 @@ public sealed class PfxSigningProvider : ISigningProvider
             }
         }
 
-        var canSign = certificate.HasPrivateKey && hasUsablePrivateKey && currentlyValid;
+        var canSign = certificate.HasPrivateKey && hasUsablePrivateKey && allowedForSigning;
         var publicDer = certificate.Export(X509ContentType.Cert);
         var keyUsages = ReadKeyUsages(certificate);
         var enhancedKeyUsages = ReadEnhancedKeyUsages(certificate);

@@ -11,7 +11,9 @@ using OpenSignature.Infrastructure.Persistence;
 using OpenSignature.Infrastructure.Secrets;
 using OpenSignature.Infrastructure.Storage;
 using OpenSignature.Signing;
+using OpenSignature.Signing.Hsm;
 using OpenSignature.Signing.Pfx;
+using OpenSignature.Signing.SmartCard;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -66,6 +68,14 @@ builder.Services.AddPfxSigningProvider(options =>
             System.IO.Path.Combine(builder.Environment.ContentRootPath, "..", "..", options.Path.Replace("./", string.Empty)));
     }
 });
+builder.Services.Configure<SigningOptions>(
+    builder.Configuration.GetSection(SigningOptions.SectionName));
+
+var smartCard = new SmartCardSigningProviderOptions();
+builder.Configuration.GetSection(SmartCardSigningProviderOptions.SectionName).Bind(smartCard);
+var hsm = new HsmSigningProviderOptions();
+builder.Configuration.GetSection(HsmSigningProviderOptions.SectionName).Bind(hsm);
+builder.Services.AddHardwareSigningProviders(smartCard, hsm);
 
 builder.Services.AddHealthChecks();
 

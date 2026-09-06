@@ -1,6 +1,7 @@
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
+using Microsoft.Extensions.Options;
 using OpenSignature.Application.Abstractions.Secrets;
 using OpenSignature.Application.Security;
 
@@ -24,7 +25,10 @@ public static class SecretStoreServiceCollectionExtensions
         ArgumentNullException.ThrowIfNull(configuration);
 
         services.Configure<SecretStoreOptions>(configuration.GetSection(SecretStoreOptions.SectionName));
-        services.TryAddSingleton<ConfigurationSecretStore>();
+        services.TryAddSingleton(sp =>
+            new ConfigurationSecretStore(
+                sp.GetRequiredService<IOptionsMonitor<SecretStoreOptions>>(),
+                configuration));
         services.TryAddSingleton<EnvironmentSecretStore>();
         services.TryAddSingleton<ISecretStore>(static sp =>
         {

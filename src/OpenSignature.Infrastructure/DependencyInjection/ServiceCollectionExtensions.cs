@@ -22,6 +22,12 @@ namespace OpenSignature.Infrastructure;
 public static class ServiceCollectionExtensions
 {
     /// <summary>
+    /// Upper bound for rented <see cref="OpenSignatureDbContext"/> instances.
+    /// Physical PostgreSQL connections are pooled separately by Npgsql.
+    /// </summary>
+    internal const int DbContextPoolSize = 128;
+
+    /// <summary>
     /// Registers PostgreSQL persistence via EF Core (<see cref="OpenSignatureDbContext"/>)
     /// and the signature-request idempotency store.
     /// </summary>
@@ -32,8 +38,9 @@ public static class ServiceCollectionExtensions
         ArgumentNullException.ThrowIfNull(services);
         ArgumentException.ThrowIfNullOrWhiteSpace(connectionString);
 
-        services.AddDbContext<OpenSignatureDbContext>(options =>
-            options.UseNpgsql(connectionString));
+        services.AddDbContextPool<OpenSignatureDbContext>(
+            options => options.UseNpgsql(connectionString),
+            poolSize: DbContextPoolSize);
 
         services.AddScoped<ISignatureRequestIdempotencyStore, EfSignatureRequestIdempotencyStore>();
         services.TryAddSingleton(TimeProvider.System);

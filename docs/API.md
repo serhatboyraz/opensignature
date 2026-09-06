@@ -47,7 +47,7 @@ Errors use RFC 7807 Problem Details. Machine-readable codes are in the `errorCod
 | `SIGNATURE_PROFILE_UNSUPPORTED` | 400 | Unknown or unsupported `profile` |
 | `SIGNING_PROVIDER_UNAVAILABLE` | 400 | Unknown provider type or provider not available for the request |
 | `SIGNING_CERTIFICATE_NOT_FOUND` | 400 | Requested certificate thumbprint not found |
-| `SIGNING_CERTIFICATE_EXPIRED` | 422 / job failure | Certificate expired at signing time |
+| `SIGNING_CERTIFICATE_EXPIRED` | 422 / job failure | Certificate expired at signing time. Not raised when `Signing:AllowExpiredCertificates` is true. |
 | `SIGNATURE_INPUT_NOT_FOUND` | 404 | Signature id not found for the tenant |
 | `SIGNATURE_OUTPUT_NOT_FOUND` | 409 | Signed content requested before completion (or output missing) |
 | `SIGNATURE_NOT_CANCELLABLE` | 409 | Cancel requested after signing has progressed past a cancellable state |
@@ -339,7 +339,9 @@ Does not return private keys or exportable key blobs.
 
 ### GET /api/v1/providers
 
-Lists configured signing providers (type, id, display name, enabled flag). Does not expose credentials, PIN, or keystore secrets.
+Lists configured signing providers (type, id, display name). Does not expose credentials, PIN, or keystore secrets.
+
+USB tokens and smart cards appear as a **SmartCard** provider when `Signing:SmartCard` is configured (or auto-detected in Development). They are not enumerated as raw USB devices. See `docs/OPERATIONS.md`.
 
 #### Headers
 

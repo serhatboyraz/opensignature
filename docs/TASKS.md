@@ -611,6 +611,22 @@
 - Commit:
   - `feat(signing): add HSM signing provider`
 
+### T103 — Native PKCS#11 Host Wiring
+- Status: `DONE`
+- Priority: P1
+- Depends on: T101, T102
+- Scope:
+  - Load vendor PKCS#11 modules via Pkcs11Interop (`IPkcs11LibraryFactory` production backend).
+  - Register SmartCard / HSM providers in API and Worker from configuration.
+  - Auto-detect well-known USB-token PKCS#11 libraries in Development.
+  - Health checks must not log in (avoid PIN lockout).
+- Tests:
+  - missing module unavailable
+  - auto-detect probe
+  - SmartCard registered from options
+- Commit:
+  - `feat(signing): load native PKCS11 USB token providers`
+
 ---
 
 ## Phase 11 — Security

@@ -28,6 +28,23 @@ docker compose ps
 
 Defaults: Postgres `localhost:5432` (`esign`/`esign`/`opensignature`), RabbitMQ `5672` + management UI `15672`. If host port `5432` is busy, set `POSTGRES_PORT=5433` in `.env` and match `ConnectionStrings:PostgreSQL` in the Api/Worker Development settings.
 
+## Start development apps
+
+One command starts Docker dependencies, the API, the signing worker, and the React UI:
+
+```bash
+pwsh ./scripts/Start-Development.ps1
+```
+
+| App | URL |
+| --- | --- |
+| Web | http://localhost:5173 |
+| API | http://localhost:5270 |
+
+Press Ctrl+C in that terminal to stop the API, worker, and web processes. Containers stay up until `docker compose down`.
+
+Optional flags: `-SkipInfrastructure`, `-SkipCertificate`, `-ApiProfile https`.
+
 ## Working POC (async signing)
 
 ```bash
@@ -77,6 +94,8 @@ curl -s -X POST "http://localhost:5270/api/v1/verifications" \
 
 Supported MVP formats: **CAdES-B**, **XAdES-B**, **PAdES-B** via the development PFX provider. Sample inputs live under `samples/`.
 
+USB tokens appear on the Providers page (`/providers`) when vendor PKCS#11 middleware is installed. Development auto-detects well-known libraries (`Signing:SmartCard:AutoDetect`). Expired token certificates can sign in Development via `Signing:AllowExpiredCertificates` (keep this `false` in production). See [Operations](docs/OPERATIONS.md).
+
 ## Tests
 
 ```bash
@@ -89,10 +108,11 @@ dotnet test OpenSignature.slnx
 src/OpenSignature.Api|Application|Domain|Infrastructure|Signing|Signing.Contracts|Worker|Web
 tests/
 docs/
+scripts/Start-Development.ps1
 scripts/Generate-DevCertificate.ps1
 samples/
 ```
 
 ## Status
 
-POC path is operational: API → storage → PostgreSQL → outbox → RabbitMQ → worker → signing engine → download. Further tasks (advanced profiles, ASiC, hardware providers, React UI, auth) continue via `docs/TASKS.md`.
+POC path is operational: API → storage → PostgreSQL → outbox → RabbitMQ → worker → signing engine → download. USB-token PKCS#11 providers are registered from configuration (auto-detect in Development). Further work continues via `docs/TASKS.md`.

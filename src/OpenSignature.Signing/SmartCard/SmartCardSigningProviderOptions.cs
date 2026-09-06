@@ -10,7 +10,14 @@ public sealed class SmartCardSigningProviderOptions : Pkcs11.Pkcs11ProviderOptio
 
     public SmartCardSigningProviderOptions()
     {
-        ProviderId = "smartcard";
-        Name = "Smart Card Signing Provider";
+        ProviderId = "usb-token";
+        Name = "USB Token / Smart Card";
     }
+
+    /// <summary>
+    /// When true and <see cref="Pkcs11.Pkcs11ProviderOptionsBase.ModulePath"/> is empty,
+    /// probe well-known vendor PKCS#11 library locations (USB token middleware).
+    /// If nothing is found, a sentinel path is used so the provider still appears in the API as unavailable.
+    /// </summary>
+    public bool AutoDetect { get; set; }
 }

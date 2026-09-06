@@ -29,7 +29,7 @@ export function ProvidersPage() {
     <section className="page">
       <header className="page-header">
         <h1>Providers</h1>
-        <p>Configured signing providers and live health checks.</p>
+        <p>Configured signing providers and live health checks. USB tokens appear as SmartCard after PKCS#11 middleware is installed (Development auto-detects well-known vendor libraries).</p>
       </header>
 
       {listQuery.isLoading ? <p className="muted">Loading providers…</p> : null}

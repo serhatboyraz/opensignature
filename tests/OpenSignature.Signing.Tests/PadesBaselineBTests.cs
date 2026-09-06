@@ -108,6 +108,66 @@ public sealed class PadesBaselineBTests
     }
 
     [Fact]
+    public void Structure_reader_recovers_when_xref_object_offsets_are_wrong()
+    {
+        var pdf = PdfTestDocuments.CreateClassicPdfWithInaccurateObjectOffsets();
+
+        var structure = PdfStructure.Load(pdf);
+
+        Assert.Equal(1, structure.PageCount);
+        Assert.Equal(1, structure.RootObjectNumber);
+        Assert.Equal(2, structure.PagesObjectNumber);
+        Assert.Equal(3, structure.FirstPageObjectNumber);
+    }
+
+    [Fact]
+    public void Structure_reader_recovers_handwritten_pdf_with_wrong_xref_offsets()
+    {
+        var pdf = PdfTestDocuments.LoadHandWrittenPdfWithWrongXrefOffsets();
+
+        var structure = PdfStructure.Load(pdf);
+
+        Assert.Equal(1, structure.PageCount);
+        Assert.Equal(1, structure.RootObjectNumber);
+        Assert.Equal(2, structure.PagesObjectNumber);
+        Assert.Equal(3, structure.FirstPageObjectNumber);
+    }
+
+    [Fact]
+    public async Task Pades_b_signs_handwritten_pdf_with_wrong_xref_offsets()
+    {
+        using var material = CreateMaterial();
+        await using var provider = CreateProvider(material);
+        var selector = await DefaultSelectorAsync(provider);
+        var pdf = PdfTestDocuments.LoadHandWrittenPdfWithWrongXrefOffsets();
+
+        var signer = new PadesBaselineBSigner();
+        var result = await signer.SignAsync(
+            pdf,
+            provider,
+            selector,
+            appearance: new PadesVisibleAppearance("test", ImageBytes: null, ImageContentType: null, PageNumber: 1));
+
+        PadesBaselineBSigner.ValidateSignedPdf(result.SignedPdf);
+        var signed = PdfStructure.Load(result.SignedPdf);
+        Assert.Equal(1, signed.PageCount);
+        Assert.Equal(3, signed.FirstPageObjectNumber);
+    }
+
+    [Fact]
+    public async Task Pades_b_signs_classic_xref_when_object_offsets_are_slightly_wrong()
+    {
+        using var material = CreateMaterial();
+        await using var provider = CreateProvider(material);
+        var selector = await DefaultSelectorAsync(provider);
+        var pdf = PdfTestDocuments.CreateClassicPdfWithInaccurateObjectOffsets();
+
+        var signer = new PadesBaselineBSigner();
+        var result = await signer.SignAsync(pdf, provider, selector);
+        PadesBaselineBSigner.ValidateSignedPdf(result.SignedPdf);
+    }
+
+    [Fact]
     public void Structure_reader_keeps_eighteen_pages_when_object_two_is_a_trap()
     {
         var pdf = PdfTestDocuments.CreateEighteenPagePdfWithTrap();

@@ -17,6 +17,7 @@ public sealed class SmartCardSigningProvider : ISigningProvider
     private readonly SmartCardSigningProviderOptions _options;
     private readonly IPkcs11LibraryFactory _libraryFactory;
     private readonly ISigningSecretProvider? _secretProvider;
+    private readonly SigningOptions _signingOptions;
     private readonly object _gate = new();
     private IPkcs11Library? _library;
     private string? _initFailureDetail;
@@ -25,15 +26,21 @@ public sealed class SmartCardSigningProvider : ISigningProvider
     public SmartCardSigningProvider(
         Microsoft.Extensions.Options.IOptions<SmartCardSigningProviderOptions> options,
         IPkcs11LibraryFactory libraryFactory,
-        ISigningSecretProvider? secretProvider = null)
-        : this(options?.Value ?? throw new ArgumentNullException(nameof(options)), libraryFactory, secretProvider)
+        ISigningSecretProvider? secretProvider = null,
+        Microsoft.Extensions.Options.IOptions<SigningOptions>? signingOptions = null)
+        : this(
+            options?.Value ?? throw new ArgumentNullException(nameof(options)),
+            libraryFactory,
+            secretProvider,
+            signingOptions?.Value)
     {
     }
 
     public SmartCardSigningProvider(
         SmartCardSigningProviderOptions options,
         IPkcs11LibraryFactory libraryFactory,
-        ISigningSecretProvider? secretProvider = null)
+        ISigningSecretProvider? secretProvider = null,
+        SigningOptions? signingOptions = null)
     {
         ArgumentNullException.ThrowIfNull(options);
         ArgumentNullException.ThrowIfNull(libraryFactory);
@@ -56,6 +63,7 @@ public sealed class SmartCardSigningProvider : ISigningProvider
         _options = options;
         _libraryFactory = libraryFactory;
         _secretProvider = secretProvider;
+        _signingOptions = signingOptions ?? new SigningOptions();
 
         ProviderId = options.ProviderId.Trim();
         Name = options.Name.Trim();
@@ -116,21 +124,20 @@ public sealed class SmartCardSigningProvider : ISigningProvider
 
         return Task.FromResult(WithSession(session =>
         {
-            var objects = FindCertificateObjects(session);
-            var infos = MapCertificates(objects);
-            var index = infos.FindIndex(c => Pkcs11CertificateMapper.Matches(c, certificateSelector));
-            if (index < 0)
+            var mapped = MapCertificatePairs(FindCertificateObjects(session));
+            var match = mapped.FirstOrDefault(pair => Pkcs11CertificateMapper.Matches(pair.Info, certificateSelector));
+            if (match.Object is null)
             {
                 throw new InvalidOperationException("Signing certificate was not found for the provided selector.");
             }
 
-            if (!infos[index].CanSign)
+            if (!match.Info.CanSign)
             {
                 throw new InvalidOperationException(
                     "Selected certificate cannot sign (missing private key pairing or outside validity window).");
             }
 
-            var keyFilter = Pkcs11CertificateMapper.CreateKeyFilter(objects[index]);
+            var keyFilter = Pkcs11CertificateMapper.CreateKeyFilter(match.Object);
             var privateKey = session.FindPrivateKey(keyFilter)
                 ?? throw new InvalidOperationException("Matching private key was not found on the token.");
 
@@ -152,29 +159,42 @@ public sealed class SmartCardSigningProvider : ISigningProvider
                     library.UnavailableDetail ?? $"Smart card module '{_options.ModulePath}' is unavailable."));
             }
 
-            var slot = Pkcs11ProviderHelpers.ResolveSlot(library, _options);
+            IPkcs11Slot slot;
+            try
+            {
+                slot = Pkcs11ProviderHelpers.ResolveSlot(library, _options);
+            }
+            catch (InvalidOperationException ex)
+            {
+                return Task.FromResult(ProviderHealthStatus.Unavailable(ex.Message));
+            }
+
             if (!slot.TokenPresent)
             {
                 return Task.FromResult(ProviderHealthStatus.Unavailable(
                     $"Smart card token is not present in slot '{slot.SlotId}'."));
             }
 
-            var certificates = WithSession(session => EnumerateCertificates(session));
-            var signable = certificates.Count(static c => c.CanSign);
-            if (certificates.Count == 0)
+            // Do not log in during health checks — repeated PIN attempts can lock USB tokens.
+            var label = slot.TokenLabel ?? "unlabeled";
+            if (string.IsNullOrWhiteSpace(_options.PinSecretName))
             {
                 return Task.FromResult(ProviderHealthStatus.Degraded(
-                    $"Smart card provider '{ProviderId}' connected but found no certificates."));
+                    $"USB token is present in slot {slot.SlotId} ({label}). Configure PinSecretName to enumerate certificates and sign."));
             }
 
-            if (signable == 0)
+            try
+            {
+                _ = Pkcs11ProviderHelpers.ResolvePin(_options, _secretProvider);
+            }
+            catch (InvalidOperationException)
             {
                 return Task.FromResult(ProviderHealthStatus.Degraded(
-                    $"Smart card provider '{ProviderId}' found {certificates.Count} certificate(s) but none are signable."));
+                    $"USB token is present in slot {slot.SlotId} ({label}). PIN secret '{_options.PinSecretName.Trim()}' is missing or empty."));
             }
 
             return Task.FromResult(ProviderHealthStatus.Healthy(
-                $"Smart card provider '{ProviderId}' slot {slot.SlotId}: {certificates.Count} certificate(s); {signable} signable."));
+                $"USB token is present in slot {slot.SlotId} ({label})."));
         }
         catch (Exception ex) when (ex is InvalidOperationException or ArgumentException or IOException)
         {
@@ -201,7 +221,7 @@ public sealed class SmartCardSigningProvider : ISigningProvider
     }
 
     private List<CertificateInfo> EnumerateCertificates(IPkcs11Session session) =>
-        MapCertificates(FindCertificateObjects(session));
+        MapCertificatePairs(FindCertificateObjects(session)).Select(static pair => pair.Info).ToList();
 
     private IReadOnlyList<Pkcs11CertificateObject> FindCertificateObjects(IPkcs11Session session)
     {
@@ -209,23 +229,17 @@ public sealed class SmartCardSigningProvider : ISigningProvider
         return session.FindCertificates(filter);
     }
 
-    private List<CertificateInfo> MapCertificates(IReadOnlyList<Pkcs11CertificateObject> objects)
+    private IReadOnlyList<(Pkcs11CertificateObject Object, CertificateInfo Info)> MapCertificatePairs(
+        IReadOnlyList<Pkcs11CertificateObject> objects)
     {
         var library = EnsureLibrary();
         var slot = Pkcs11ProviderHelpers.ResolveSlot(library, _options);
-        var now = DateTimeOffset.UtcNow;
-        var result = new List<CertificateInfo>(objects.Count);
-        for (var i = 0; i < objects.Count; i++)
-        {
-            result.Add(Pkcs11CertificateMapper.ToCertificateInfo(
-                objects[i],
-                slot.SlotId,
-                ProviderScheme,
-                i,
-                now));
-        }
-
-        return result;
+        return Pkcs11CertificateMapper.MapAll(
+            objects,
+            slot.SlotId,
+            ProviderScheme,
+            DateTimeOffset.UtcNow,
+            _signingOptions.AllowExpiredCertificates);
     }
 
     private T WithSession<T>(Func<IPkcs11Session, T> action)

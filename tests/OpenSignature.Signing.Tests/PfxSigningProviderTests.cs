@@ -94,6 +94,40 @@ public sealed class PfxSigningProviderTests
     }
 
     [Fact]
+    public async Task Expired_certificate_can_sign_when_allow_expired_is_enabled()
+    {
+        using var material = EphemeralPfx.CreateRsa(
+            subject: "CN=OpenSignature Expired Allowed",
+            notBefore: DateTimeOffset.UtcNow.AddYears(-2),
+            notAfter: DateTimeOffset.UtcNow.AddDays(-1),
+            password: TestPassword);
+
+        await using var provider = new PfxSigningProvider(
+            new PfxSigningProviderOptions
+            {
+                ProviderId = "pfx-expired-allowed",
+                Name = "PFX Expired Allowed",
+                CertificateBytes = material.PfxBytes,
+                Password = TestPassword
+            },
+            signingOptions: new SigningOptions { AllowExpiredCertificates = true });
+
+        var certificates = await provider.ListCertificatesAsync();
+        Assert.Single(certificates);
+        Assert.True(certificates[0].CanSign);
+        Assert.False(certificates[0].IsCurrentlyValid());
+
+        var digest = RandomDigest(DigestAlgorithm.Sha256);
+        var signature = await provider.SignDigestAsync(
+            digest,
+            DigestAlgorithm.Sha256,
+            SigningCertificateSelector.ByThumbprint(certificates[0].Thumbprint));
+
+        Assert.NotEmpty(signature);
+        Assert.True(VerifyRsaSignature(certificates[0], digest, signature, HashAlgorithmName.SHA256));
+    }
+
+    [Fact]
     public async Task Missing_private_key_is_rejected()
     {
         using var material = EphemeralPfx.CreatePublicOnlyRsaPfx(

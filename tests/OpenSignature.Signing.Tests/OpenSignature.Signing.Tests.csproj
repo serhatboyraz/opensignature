@@ -17,6 +17,10 @@
   </ItemGroup>
 
   <ItemGroup>
+    <None Include="TestData\handwritten-wrong-xref.pdf" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
+  <ItemGroup>
     <ProjectReference Include="..\..\src\OpenSignature.Signing\OpenSignature.Signing.csproj" />
   </ItemGroup>
 

@@ -70,6 +70,34 @@ public sealed class CryptoPrimitivesTests
     }
 
     [Fact]
+    public async Task CmsSignatureHelper_signs_expired_certificate_when_provider_allows_it()
+    {
+        using var material = EphemeralPfx.CreateRsa(
+            "CN=OpenSignature CmsExpired",
+            DateTimeOffset.UtcNow.AddYears(-2),
+            DateTimeOffset.UtcNow.AddDays(-1),
+            TestPassword);
+
+        await using var provider = new PfxSigningProvider(
+            new PfxSigningProviderOptions
+            {
+                ProviderId = "pfx-cms-expired",
+                Name = "CMS Expired Test",
+                CertificateBytes = material.PfxBytes,
+                Password = TestPassword
+            },
+            signingOptions: new SigningOptions { AllowExpiredCertificates = true });
+
+        var certs = await provider.ListCertificatesAsync();
+        Assert.True(certs[0].CanSign);
+        var selector = SigningCertificateSelector.ByThumbprint(certs[0].Thumbprint);
+        var content = Encoding.UTF8.GetBytes("expired-cms");
+
+        var cms = await CmsSignatureHelper.CreateSignedCmsAsync(content, detached: true, provider, selector);
+        CmsSignatureHelper.ValidateSignedCms(cms, content);
+    }
+
+    [Fact]
     public void XmlCanonicalizationHelper_exclusive_c14n_is_deterministic()
     {
         const string xml = """<Root xmlns:a="urn:a"><a:Child>value</a:Child></Root>""";

@@ -84,6 +84,24 @@ public sealed class SecretStoreTests
     }
 
     [Fact]
+    public async Task AddSecretStores_reads_colon_separated_name_from_user_secrets_path()
+    {
+        var configuration = new ConfigurationBuilder()
+            .AddInMemoryCollection(new Dictionary<string, string?>
+            {
+                ["Secrets:Values:Signing:SmartCard:Pin"] = "token-pin"
+            })
+            .Build();
+
+        var services = new ServiceCollection();
+        services.AddSecretStores(configuration);
+        await using var provider = services.BuildServiceProvider();
+
+        var store = provider.GetRequiredService<ISecretStore>();
+        Assert.Equal("token-pin", await store.GetSecretAsync("Signing:SmartCard:Pin"));
+    }
+
+    [Fact]
     public async Task AddSecretStores_registers_rotating_chain()
     {
         var configuration = new ConfigurationBuilder()

@@ -93,3 +93,86 @@ Set `Timestamping:Url` on the worker to enable the HTTP RFC 3161 client:
 HTTP TSA failures are classified as retryable (`TIMESTAMP_OPERATION_FAILED`) until the bounded retry budget is exhausted.
 
 LT/LTA also require CRL or OCSP evidence registered via `AddLongTermValidationData`. The default provider only includes the signing certificate, so LT/LTA fail with `SIGNATURE_VALIDATION_DATA_UNAVAILABLE` until revocation material is supplied. OpenSignature does not fabricate timestamps or revocation data.
+
+## USB tokens and smart cards (PKCS#11)
+
+The Providers page lists **configured signing providers**, not a live scan of every USB device. A dongle is visible only after a PKCS#11 module is registered.
+
+### Why a dongle might be missing
+
+1. Only the Development PFX provider is registered unless SmartCard/HSM is configured.
+2. Vendor middleware (PKCS#11 DLL / SO) must be installed, and its architecture must match the API/Worker process (typically **x64**).
+3. The API and Worker must run **on the host** (not inside Docker) so they can open the USB device. `docker-compose.yml` starts PostgreSQL and RabbitMQ only.
+4. Restart the API and Worker after plugging the token in or installing middleware.
+
+### Development auto-detect
+
+With `Signing:SmartCard:AutoDetect=true` (default in `appsettings.Development.json`), OpenSignature probes well-known middleware libraries, including:
+
+- `akisp11.dll` (AKİS)
+- `eTPKCS11.dll` / `eToken.dll` (SafeNet / e-Güven)
+- `aetpkss1.dll`
+- `ngp11v211.dll` (TürkTrust)
+- `opensc-pkcs11.dll`
+
+If a library is found, a **USB Token / Smart Card** row appears. If middleware is missing, the same row still appears as **Unavailable** so the gap is visible.
+
+### Manual module path
+
+Set the vendor PKCS#11 path when auto-detect picks the wrong library or finds nothing:
+
+```json
+"Signing": {
+  "SmartCard": {
+    "ProviderId": "usb-token",
+    "Name": "USB Token / Smart Card",
+    "ModulePath": "C:\\Windows\\System32\\akisp11.dll",
+    "AutoDetect": false,
+    "TokenLabel": "",
+    "PinSecretName": "smartcard-pin"
+  }
+}
+```
+
+If several tokens are present, set `SlotId` or `TokenLabel`.
+
+### PIN
+
+There is no secrets file in the git repository. `PinSecretName` (`Signing:SmartCard:Pin`) is the lookup key. Put the PIN in user secrets (preferred).
+
+`dotnet user-secrets set` treats `:` as a nested path. Set the full configuration key on **both** projects:
+
+```bash
+dotnet user-secrets set "Secrets:Values:Signing:SmartCard:Pin" "<token-pin>" --project src/OpenSignature.Api
+dotnet user-secrets set "Secrets:Values:Signing:SmartCard:Pin" "<token-pin>" --project src/OpenSignature.Worker
+```
+
+List / remove:
+
+```bash
+dotnet user-secrets list --project src/OpenSignature.Api
+dotnet user-secrets remove "Secrets:Values:Signing:SmartCard:Pin" --project src/OpenSignature.Api
+```
+
+User secrets files (outside the repo, Windows):
+
+```text
+%APPDATA%\Microsoft\UserSecrets\opensignature-api-dev\secrets.json
+%APPDATA%\Microsoft\UserSecrets\dotnet-OpenSignature.Worker-1710ba6a-80c6-474d-af7e-f5bea1dafad0\secrets.json
+```
+
+Set the PIN on **both** the API and the Worker. Health checks do **not** log in. Listing certificates and signing do. Wrong PIN attempts can lock the token.
+
+The same `Signing:SmartCard` section must be configured on **both** the API (so the provider is listed) and the Worker (so signing can use the token).
+
+### Expired USB-token certificates
+
+By default, certificates outside `NotBefore`/`NotAfter` cannot sign (`CanSign=false`). For local development with an expired token certificate, set `Signing:AllowExpiredCertificates` on **both** the API and the Worker:
+
+```json
+"Signing": {
+  "AllowExpiredCertificates": true
+}
+```
+
+Development `appsettings.Development.json` sets this to `true`. Leave it `false` in production. Signature verification still reports that the certificate is expired; this flag only allows creating a signature with an expired key.

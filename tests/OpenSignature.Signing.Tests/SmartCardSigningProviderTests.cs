@@ -35,6 +35,7 @@ public sealed class SmartCardSigningProviderTests
         Assert.Equal("RSA", certificates[0].PublicKeyAlgorithm);
         Assert.StartsWith("smartcard://", certificates[0].ProviderReference, StringComparison.Ordinal);
         Assert.True(health.IsHealthy);
+        Assert.Contains("USB token is present", health.Detail, StringComparison.Ordinal);
 
         var digest = RandomDigest(DigestAlgorithm.Sha256);
         var signature = await provider.SignDigestAsync(
@@ -62,6 +63,25 @@ public sealed class SmartCardSigningProviderTests
         var ex = await Assert.ThrowsAsync<InvalidOperationException>(() => provider.ListCertificatesAsync());
         Assert.DoesNotContain("wrong-pin", ex.Message, StringComparison.Ordinal);
         Assert.DoesNotContain(Pin, ex.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task Health_without_pin_is_degraded_when_token_is_present()
+    {
+        using var library = MockPkcs11Library.CreateWithRsa(modulePath: ModulePath, expectedPin: Pin);
+        var options = CreateOptions();
+        options.PinSecretName = null;
+        await using var provider = new SmartCardSigningProvider(
+            options,
+            new MockPkcs11LibraryFactory(library),
+            secretProvider: null);
+
+        var health = await provider.GetHealthAsync();
+
+        Assert.Equal(ProviderHealthState.Degraded, health.State);
+        Assert.False(health.IsHealthy);
+        Assert.Contains("PinSecretName", health.Detail, StringComparison.Ordinal);
+        Assert.DoesNotContain(Pin, health.Detail ?? string.Empty, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -116,6 +136,37 @@ public sealed class SmartCardSigningProviderTests
         var second = await provider.SignDigestAsync(digest, DigestAlgorithm.Sha256, selector);
 
         Assert.Equal(first, second);
+    }
+
+    [Fact]
+    public async Task Expired_token_certificate_can_sign_when_allow_expired_is_enabled()
+    {
+        using var library = MockPkcs11Library.CreateWithRsa(
+            modulePath: ModulePath,
+            expectedPin: Pin,
+            subject: "CN=OpenSignature Expired SmartCard",
+            notBefore: DateTimeOffset.UtcNow.AddYears(-2),
+            notAfter: DateTimeOffset.UtcNow.AddDays(-1));
+
+        await using var provider = new SmartCardSigningProvider(
+            CreateOptions(),
+            new MockPkcs11LibraryFactory(library),
+            new InMemorySigningSecretProvider(new Dictionary<string, string> { [PinSecretName] = Pin }),
+            new SigningOptions { AllowExpiredCertificates = true });
+
+        var certificates = await provider.ListCertificatesAsync();
+        Assert.Single(certificates);
+        Assert.True(certificates[0].CanSign);
+        Assert.False(certificates[0].IsCurrentlyValid());
+
+        var digest = RandomDigest(DigestAlgorithm.Sha256);
+        var signature = await provider.SignDigestAsync(
+            digest,
+            DigestAlgorithm.Sha256,
+            SigningCertificateSelector.ByThumbprint(certificates[0].Thumbprint));
+
+        Assert.NotEmpty(signature);
+        Assert.True(VerifyRsa(certificates[0], digest, signature));
     }
 
     private static SmartCardSigningProvider CreateProvider(MockPkcs11Library library)

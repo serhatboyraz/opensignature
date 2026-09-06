@@ -13,6 +13,7 @@ internal sealed class PdfStructure
     private readonly Dictionary<int, PdfXrefEntry> _xref = [];
     private readonly Dictionary<int, Dictionary<string, string>> _dictionaryCache = [];
     private readonly Dictionary<int, byte[]> _objectStreamCache = [];
+    private Dictionary<(int ObjectNumber, int Generation), List<int>>? _scannedObjectHeaders;
 
     private PdfStructure(byte[] pdf)
     {
@@ -575,7 +576,150 @@ internal sealed class PdfStructure
             return ReadCompressedObject(entry);
         }
 
-        return ReadUncompressedObject(entry.Offset);
+        var offset = ResolveUncompressedOffset(entry.Offset, objectNumber, entry.Generation);
+        if (offset != entry.Offset)
+        {
+            _xref[objectNumber] = PdfXrefEntry.Uncompressed(objectNumber, entry.Generation, offset);
+        }
+
+        return ReadUncompressedObject(offset);
+    }
+
+    /// <summary>
+    /// Hand-written and line-ending-converted PDFs often store xref offsets a few bytes off.
+    /// Prefer the claimed offset, then the nearest header within a small window, then the last
+    /// <c>n g obj</c> in the file (incremental updates).
+    /// </summary>
+    private int ResolveUncompressedOffset(int claimedOffset, int objectNumber, int generation)
+    {
+        if (TryMatchObjectHeader(claimedOffset, objectNumber, generation))
+        {
+            return claimedOffset;
+        }
+
+        const int nearbyWindow = 256;
+        var headers = _scannedObjectHeaders ??= ScanObjectHeaders();
+        if (!TryGetHeaderOffsets(headers, objectNumber, generation, out var offsets))
+        {
+            throw new InvalidOperationException(
+                $"Expected PDF object {objectNumber} {generation} obj at offset {claimedOffset}.");
+        }
+
+        var nearest = offsets[0];
+        var nearestDistance = Math.Abs(nearest - claimedOffset);
+        foreach (var candidate in offsets)
+        {
+            var distance = Math.Abs(candidate - claimedOffset);
+            if (distance < nearestDistance)
+            {
+                nearest = candidate;
+                nearestDistance = distance;
+            }
+        }
+
+        if (nearestDistance <= nearbyWindow)
+        {
+            return nearest;
+        }
+
+        return offsets[^1];
+    }
+
+    private static bool TryGetHeaderOffsets(
+        Dictionary<(int ObjectNumber, int Generation), List<int>> headers,
+        int objectNumber,
+        int generation,
+        out List<int> offsets)
+    {
+        if (headers.TryGetValue((objectNumber, generation), out offsets!) && offsets.Count > 0)
+        {
+            return true;
+        }
+
+        offsets = [];
+        foreach (var entry in headers)
+        {
+            if (entry.Key.ObjectNumber == objectNumber)
+            {
+                offsets.AddRange(entry.Value);
+            }
+        }
+
+        return offsets.Count > 0;
+    }
+
+    private bool TryMatchObjectHeader(int position, int objectNumber, int generation)
+    {
+        if ((uint)position >= (uint)_pdf.Length)
+        {
+            return false;
+        }
+
+        if (position > 0 && PdfInput.IsDigit(_pdf[position]) && PdfInput.IsDigit(_pdf[position - 1]))
+        {
+            return false;
+        }
+
+        var input = new PdfInput(_pdf, position);
+        input.SkipWhitespaceAndComments();
+        if (!input.TryReadNumber(out var parsedObject) || parsedObject != objectNumber)
+        {
+            return false;
+        }
+
+        if (!input.TryReadNumber(out var parsedGeneration) || parsedGeneration != generation)
+        {
+            return false;
+        }
+
+        return input.TryConsumeKeyword("obj"u8);
+    }
+
+    private Dictionary<(int ObjectNumber, int Generation), List<int>> ScanObjectHeaders()
+    {
+        var headers = new Dictionary<(int ObjectNumber, int Generation), List<int>>();
+        var input = new PdfInput(_pdf);
+        for (var i = 0; i < _pdf.Length; i++)
+        {
+            if (!PdfInput.IsDigit(_pdf[i]))
+            {
+                continue;
+            }
+
+            if (i > 0 && PdfInput.IsDigit(_pdf[i - 1]))
+            {
+                continue;
+            }
+
+            input.Position = i;
+            if (!input.TryReadNumber(out var objectNumber)
+                || objectNumber is < 0 or > int.MaxValue)
+            {
+                continue;
+            }
+
+            if (!input.TryReadNumber(out var generation)
+                || generation is < 0 or > int.MaxValue)
+            {
+                continue;
+            }
+
+            if (!input.TryConsumeKeyword("obj"u8))
+            {
+                continue;
+            }
+
+            var key = ((int)objectNumber, (int)generation);
+            if (!headers.TryGetValue(key, out var offsets))
+            {
+                offsets = [];
+                headers[key] = offsets;
+            }
+
+            offsets.Add(i);
+        }
+
+        return headers;
     }
 
     private ObjectValue ReadUncompressedObject(int offset)

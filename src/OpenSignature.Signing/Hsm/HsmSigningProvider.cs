@@ -16,6 +16,7 @@ public sealed class HsmSigningProvider : ISigningProvider
     private readonly HsmSigningProviderOptions _options;
     private readonly IPkcs11LibraryFactory _libraryFactory;
     private readonly ISigningSecretProvider? _secretProvider;
+    private readonly SigningOptions _signingOptions;
     private readonly SemaphoreSlim _initLock = new(1, 1);
     private IPkcs11Library? _library;
     private Pkcs11SessionPool? _pool;
@@ -26,15 +27,21 @@ public sealed class HsmSigningProvider : ISigningProvider
     public HsmSigningProvider(
         Microsoft.Extensions.Options.IOptions<HsmSigningProviderOptions> options,
         IPkcs11LibraryFactory libraryFactory,
-        ISigningSecretProvider? secretProvider = null)
-        : this(options?.Value ?? throw new ArgumentNullException(nameof(options)), libraryFactory, secretProvider)
+        ISigningSecretProvider? secretProvider = null,
+        Microsoft.Extensions.Options.IOptions<SigningOptions>? signingOptions = null)
+        : this(
+            options?.Value ?? throw new ArgumentNullException(nameof(options)),
+            libraryFactory,
+            secretProvider,
+            signingOptions?.Value)
     {
     }
 
     public HsmSigningProvider(
         HsmSigningProviderOptions options,
         IPkcs11LibraryFactory libraryFactory,
-        ISigningSecretProvider? secretProvider = null)
+        ISigningSecretProvider? secretProvider = null,
+        SigningOptions? signingOptions = null)
     {
         ArgumentNullException.ThrowIfNull(options);
         ArgumentNullException.ThrowIfNull(libraryFactory);
@@ -62,6 +69,7 @@ public sealed class HsmSigningProvider : ISigningProvider
         _options = options;
         _libraryFactory = libraryFactory;
         _secretProvider = secretProvider;
+        _signingOptions = signingOptions ?? new SigningOptions();
 
         ProviderId = options.ProviderId.Trim();
         Name = options.Name.Trim();
@@ -125,21 +133,21 @@ public sealed class HsmSigningProvider : ISigningProvider
         return await WithSessionAsync(
             session =>
             {
-                var objects = FindCertificateObjects(session);
-                var infos = MapCertificates(objects);
-                var index = infos.FindIndex(c => Pkcs11CertificateMapper.Matches(c, certificateSelector));
-                if (index < 0)
+                var mapped = MapCertificatePairs(FindCertificateObjects(session));
+                var match = mapped.FirstOrDefault(pair =>
+                    Pkcs11CertificateMapper.Matches(pair.Info, certificateSelector));
+                if (match.Object is null)
                 {
                     throw new InvalidOperationException("Signing certificate was not found for the provided selector.");
                 }
 
-                if (!infos[index].CanSign)
+                if (!match.Info.CanSign)
                 {
                     throw new InvalidOperationException(
                         "Selected certificate cannot sign (missing private key pairing or outside validity window).");
                 }
 
-                var keyFilter = Pkcs11CertificateMapper.CreateKeyFilter(objects[index]);
+                var keyFilter = Pkcs11CertificateMapper.CreateKeyFilter(match.Object);
                 var privateKey = session.FindPrivateKey(keyFilter)
                     ?? throw new InvalidOperationException("Matching private key was not found on the HSM.");
 
@@ -221,7 +229,7 @@ public sealed class HsmSigningProvider : ISigningProvider
     }
 
     private List<CertificateInfo> EnumerateCertificates(IPkcs11Session session) =>
-        MapCertificates(FindCertificateObjects(session));
+        MapCertificatePairs(FindCertificateObjects(session)).Select(static pair => pair.Info).ToList();
 
     private IReadOnlyList<Pkcs11CertificateObject> FindCertificateObjects(IPkcs11Session session)
     {
@@ -229,22 +237,14 @@ public sealed class HsmSigningProvider : ISigningProvider
         return session.FindCertificates(filter);
     }
 
-    private List<CertificateInfo> MapCertificates(IReadOnlyList<Pkcs11CertificateObject> objects)
-    {
-        var now = DateTimeOffset.UtcNow;
-        var result = new List<CertificateInfo>(objects.Count);
-        for (var i = 0; i < objects.Count; i++)
-        {
-            result.Add(Pkcs11CertificateMapper.ToCertificateInfo(
-                objects[i],
-                _slotId,
-                ProviderScheme,
-                i,
-                now));
-        }
-
-        return result;
-    }
+    private IReadOnlyList<(Pkcs11CertificateObject Object, CertificateInfo Info)> MapCertificatePairs(
+        IReadOnlyList<Pkcs11CertificateObject> objects) =>
+        Pkcs11CertificateMapper.MapAll(
+            objects,
+            _slotId,
+            ProviderScheme,
+            DateTimeOffset.UtcNow,
+            _signingOptions.AllowExpiredCertificates);
 
     private async Task<T> WithSessionAsync<T>(
         Func<IPkcs11Session, Task<T>> action,

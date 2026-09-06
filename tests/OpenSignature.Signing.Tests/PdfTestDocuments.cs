@@ -1,6 +1,7 @@
 using System.Globalization;
 using System.IO.Compression;
 using System.Text;
+using OpenSignature.Signing.Formats.Pades;
 
 namespace OpenSignature.Signing.Tests;
 
@@ -12,6 +13,81 @@ internal static class PdfTestDocuments
     public const int RealPagesObjectNumber = 5;
     public const int FirstRealPageObjectNumber = 6;
     public const int EighteenPageCount = 18;
+
+    public static byte[] CreateClassicPdfWithInaccurateObjectOffsets()
+    {
+        return DistortClassicXrefOffsets(PadesBaselineBSigner.CreateMinimalPdf(), objectOffsetDelta: 2, startXrefDelta: 8);
+    }
+
+    public static byte[] LoadHandWrittenPdfWithWrongXrefOffsets()
+    {
+        var path = Path.Combine(AppContext.BaseDirectory, "TestData", "handwritten-wrong-xref.pdf");
+        return File.ReadAllBytes(path);
+    }
+
+    /// <summary>
+    /// Adds a constant error to classic xref object offsets and startxref, matching
+    /// hand-written PDFs that still open in lenient viewers.
+    /// </summary>
+    public static byte[] DistortClassicXrefOffsets(byte[] pdf, int objectOffsetDelta, int startXrefDelta)
+    {
+        var text = Encoding.ASCII.GetString(pdf);
+        const string xrefMarker = "\nxref\n";
+        var xrefIndex = text.LastIndexOf(xrefMarker, StringComparison.Ordinal);
+        if (xrefIndex < 0)
+        {
+            throw new InvalidOperationException("Classic xref table was not found.");
+        }
+
+        const string startxrefMarker = "\nstartxref\n";
+        var startxrefIndex = text.LastIndexOf(startxrefMarker, StringComparison.Ordinal);
+        if (startxrefIndex < xrefIndex)
+        {
+            throw new InvalidOperationException("startxref was not found after the xref table.");
+        }
+
+        var xrefBody = text[(xrefIndex + xrefMarker.Length)..startxrefIndex];
+        var rebuilt = new StringBuilder();
+        foreach (var rawLine in xrefBody.Split('\n'))
+        {
+            var line = rawLine.TrimEnd('\r');
+            if (line.Length >= 18
+                && char.IsDigit(line[0])
+                && (line.EndsWith(" n", StringComparison.Ordinal) || line.EndsWith(" n ", StringComparison.Ordinal)
+                    || line.Contains(" n ", StringComparison.Ordinal)))
+            {
+                var offsetText = line[..10];
+                if (int.TryParse(offsetText, NumberStyles.Integer, CultureInfo.InvariantCulture, out var offset)
+                    && offset > 0
+                    && line.Contains('n', StringComparison.Ordinal))
+                {
+                    var rest = line[10..];
+                    rebuilt.Append(CultureInfo.InvariantCulture, $"{offset + objectOffsetDelta:D10}");
+                    rebuilt.Append(rest);
+                    rebuilt.Append('\n');
+                    continue;
+                }
+            }
+
+            rebuilt.Append(line);
+            rebuilt.Append('\n');
+        }
+
+        var numberStart = startxrefIndex + startxrefMarker.Length;
+        var numberEnd = text.IndexOf('\n', numberStart);
+        if (numberEnd < 0)
+        {
+            throw new InvalidOperationException("startxref offset is missing.");
+        }
+
+        var originalStart = int.Parse(text[numberStart..numberEnd], CultureInfo.InvariantCulture);
+        var prefix = text[..(xrefIndex + xrefMarker.Length)];
+        var suffix = string.Concat(
+            startxrefMarker.AsSpan(1),
+            (originalStart + startXrefDelta).ToString(CultureInfo.InvariantCulture),
+            text.AsSpan(numberEnd));
+        return Encoding.ASCII.GetBytes(prefix + rebuilt + suffix);
+    }
 
     public static byte[] CreateEighteenPagePdfWithTrap()
     {
