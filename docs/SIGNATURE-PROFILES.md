@@ -48,6 +48,7 @@ OpenSignature **never silently downgrades** a requested profile. Requests for T/
 - PDF **incremental update** with `/ByteRange`, `/Contents` hex CMS container, `/SubFilter /ETSI.CAdES.detached`, and signing certificate material inside the CMS.
 - **Library choice:** `BouncyCastle.Cryptography` for CMS + purpose-built PDF incremental updater (no iText / AGPL dependency).
 - Validated by re-hashing ByteRange bytes and verifying the embedded detached CMS.
+- Incremental updates preserve the original `/Pages` tree (resolved via classic xref, xref streams, and object streams). A replacement catalog that hardcodes `/Pages 2 0 R` is not used; that previously collapsed real multi-page PDFs to a blank first page.
 - **Gaps:** no visible appearance, no pre-existing signature field reuse, no DSS/VRI, no multiple signatures orchestration beyond incremental append basics.
 
 ### Orchestration defaults

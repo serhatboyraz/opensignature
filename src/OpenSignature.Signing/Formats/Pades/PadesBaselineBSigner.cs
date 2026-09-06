@@ -1,6 +1,5 @@
 using System.Globalization;
 using System.Text;
-using System.Text.RegularExpressions;
 using OpenSignature.Signing.Contracts;
 using OpenSignature.Signing.Crypto;
 
@@ -28,7 +27,7 @@ public sealed record PadesSignatureResult(byte[] SignedPdf, string ContentType);
 /// Library choice: <c>BouncyCastle.Cryptography</c> for CMS (via <see cref="CmsSignatureHelper"/>)
 /// plus a purpose-built PDF incremental updater (no iText / AGPL dependency).
 /// </summary>
-public sealed partial class PadesBaselineBSigner : IPadesBaselineBSigner
+public sealed class PadesBaselineBSigner : IPadesBaselineBSigner
 {
     public const string SubFilter = "ETSI.CAdES.detached";
     public const int ContentsHexLength = PdfByteRangeHelper.DefaultContentsHexLength;
@@ -54,8 +53,8 @@ public sealed partial class PadesBaselineBSigner : IPadesBaselineBSigner
             throw new InvalidOperationException("Input is not a PDF document.");
         }
 
-        var prepared = BuildIncrementalUpdateWithPlaceholder(pdfBytes);
-        var placeholder = PdfByteRangeHelper.FindContentsPlaceholder(prepared, ContentsHexLength);
+        var prepared = BuildIncrementalUpdateWithPlaceholder(pdfBytes, out var updateStart);
+        var placeholder = PdfByteRangeHelper.FindContentsPlaceholder(prepared, ContentsHexLength, updateStart);
 
         PdfByteRangeHelper.PatchByteRange(prepared, "/ByteRange", placeholder.ByteRange);
 
@@ -139,10 +138,10 @@ public sealed partial class PadesBaselineBSigner : IPadesBaselineBSigner
         return ms.ToArray();
     }
 
-    private static byte[] BuildIncrementalUpdateWithPlaceholder(byte[] originalPdf)
+    private static byte[] BuildIncrementalUpdateWithPlaceholder(byte[] originalPdf, out int updateStart)
     {
-        var (prevStartXref, size) = ParseTrailer(originalPdf);
-        var nextObj = size;
+        var structure = PdfStructure.Load(originalPdf);
+        var nextObj = structure.NextObjectNumber;
 
         var sigObjNum = nextObj;
         var widgetObjNum = nextObj + 1;
@@ -168,26 +167,24 @@ public sealed partial class PadesBaselineBSigner : IPadesBaselineBSigner
         update.Append(signingTime);
         update.Append("Z) >>\nendobj\n");
 
-        // Widget annotation
+        // Widget annotation attached to a real page from the original page tree.
         update.Append(CultureInfo.InvariantCulture, $"{widgetObjNum} 0 obj\n");
         update.Append("<< /Type /Annot /Subtype /Widget /FT /Sig /F 132 /Rect [0 0 0 0] /V ");
         update.Append(CultureInfo.InvariantCulture, $"{sigObjNum} 0 R ");
-        update.Append("/T (OpenSignature1) /P 3 0 R >>\nendobj\n");
+        update.Append(CultureInfo.InvariantCulture, $"/T (OpenSignature1) /P {structure.FirstPageObjectNumber} 0 R >>\nendobj\n");
 
-        // Replacement catalog with AcroForm
+        // Replacement catalog copies the original Pages tree and other catalog keys.
         update.Append(CultureInfo.InvariantCulture, $"{catalogObjNum} 0 obj\n");
-        update.Append("<< /Type /Catalog /Pages 2 0 R /AcroForm << /Fields [");
-        update.Append(CultureInfo.InvariantCulture, $"{widgetObjNum} 0 R");
-        update.Append("] /SigFlags 3 >> >>\nendobj\n");
+        AppendReplacementCatalog(update, structure, widgetObjNum);
+        update.Append("\nendobj\n");
 
         var updateBytes = Encoding.ASCII.GetBytes(update.ToString());
 
         using var ms = new MemoryStream();
         ms.Write(originalPdf);
-        var updateStart = ms.Position;
+        updateStart = (int)ms.Position;
         ms.Write(updateBytes);
 
-        // Compute object offsets relative to file start
         var asciiUpdate = update.ToString();
         var sigOffset = updateStart + IndexOfObject(asciiUpdate, sigObjNum);
         var widgetOffset = updateStart + IndexOfObject(asciiUpdate, widgetObjNum);
@@ -201,7 +198,11 @@ public sealed partial class PadesBaselineBSigner : IPadesBaselineBSigner
         xref.Append(CultureInfo.InvariantCulture, $"{widgetOffset:D10} 00000 n \n");
         xref.Append(CultureInfo.InvariantCulture, $"{catalogOffset:D10} 00000 n \n");
         xref.Append("trailer\n");
-        xref.Append(CultureInfo.InvariantCulture, $"<< /Size {newSize} /Root {catalogObjNum} 0 R /Prev {prevStartXref} >>\n");
+        xref.Append("<<");
+        xref.Append(CultureInfo.InvariantCulture, $" /Size {newSize} /Root {catalogObjNum} 0 R /Prev {structure.StartXref}");
+        AppendPreservedTrailerEntry(xref, structure.TrailerEntries, "/Info");
+        AppendPreservedTrailerEntry(xref, structure.TrailerEntries, "/ID");
+        xref.Append(" >>\n");
         xref.Append("startxref\n");
         xref.Append(CultureInfo.InvariantCulture, $"{xrefOffset}\n");
         xref.Append("%%EOF\n");
@@ -209,6 +210,69 @@ public sealed partial class PadesBaselineBSigner : IPadesBaselineBSigner
         var xrefBytes = Encoding.ASCII.GetBytes(xref.ToString());
         ms.Write(xrefBytes);
         return ms.ToArray();
+    }
+
+    private static void AppendReplacementCatalog(StringBuilder update, PdfStructure structure, int widgetObjNum)
+    {
+        update.Append("<<");
+        if (structure.CatalogEntries.TryGetValue("/Type", out var type))
+        {
+            update.Append(" /Type ");
+            update.Append(type);
+        }
+
+        foreach (var (key, value) in structure.CatalogEntries)
+        {
+            if (key is "/Type" or "/AcroForm")
+            {
+                continue;
+            }
+
+            update.Append(' ');
+            update.Append(key);
+            update.Append(' ');
+            update.Append(value);
+        }
+
+        update.Append(" /AcroForm <<");
+        foreach (var (key, value) in structure.AcroFormEntries)
+        {
+            if (key is "/Fields" or "/SigFlags")
+            {
+                continue;
+            }
+
+            update.Append(' ');
+            update.Append(key);
+            update.Append(' ');
+            update.Append(value);
+        }
+
+        update.Append(" /Fields [");
+        foreach (var field in structure.ExistingAcroFormFields)
+        {
+            update.Append(field);
+            update.Append(' ');
+        }
+
+        update.Append(CultureInfo.InvariantCulture, $"{widgetObjNum} 0 R");
+        update.Append("] /SigFlags 3 >> >>");
+    }
+
+    private static void AppendPreservedTrailerEntry(
+        StringBuilder trailer,
+        IReadOnlyDictionary<string, string> entries,
+        string key)
+    {
+        if (!entries.TryGetValue(key, out var value) || string.IsNullOrWhiteSpace(value))
+        {
+            return;
+        }
+
+        trailer.Append(' ');
+        trailer.Append(key);
+        trailer.Append(' ');
+        trailer.Append(value);
     }
 
     private static long IndexOfObject(string updateAscii, int objectNumber)
@@ -223,27 +287,6 @@ public sealed partial class PadesBaselineBSigner : IPadesBaselineBSigner
         return index;
     }
 
-    private static (long StartXref, int Size) ParseTrailer(byte[] pdf)
-    {
-        var ascii = Encoding.ASCII.GetString(pdf);
-        var startxrefMatch = StartXrefRegex().Match(ascii);
-        if (!startxrefMatch.Success)
-        {
-            throw new InvalidOperationException("PDF is missing startxref.");
-        }
-
-        var startXref = long.Parse(startxrefMatch.Groups[1].Value, CultureInfo.InvariantCulture);
-
-        var sizeMatch = SizeRegex().Matches(ascii);
-        if (sizeMatch.Count == 0)
-        {
-            throw new InvalidOperationException("PDF trailer is missing /Size.");
-        }
-
-        var size = int.Parse(sizeMatch[^1].Groups[1].Value, CultureInfo.InvariantCulture);
-        return (startXref, size);
-    }
-
     private static byte[] ExtractByteRangeBytes(byte[] pdf, IReadOnlyList<int> byteRange)
     {
         using var ms = new MemoryStream();
@@ -254,10 +297,4 @@ public sealed partial class PadesBaselineBSigner : IPadesBaselineBSigner
 
         return ms.ToArray();
     }
-
-    [GeneratedRegex(@"startxref\s+(\d+)", RegexOptions.CultureInvariant)]
-    private static partial Regex StartXrefRegex();
-
-    [GeneratedRegex(@"\/Size\s+(\d+)", RegexOptions.CultureInvariant)]
-    private static partial Regex SizeRegex();
 }

@@ -61,7 +61,10 @@ public static partial class PdfByteRangeHelper
     /// Locates a hex Contents placeholder and derives a two-segment ByteRange covering the PDF
     /// excluding the Contents value (including angle brackets).
     /// </summary>
-    public static PdfContentsPlaceholder FindContentsPlaceholder(byte[] pdf, int contentsHexLength)
+    public static PdfContentsPlaceholder FindContentsPlaceholder(
+        byte[] pdf,
+        int contentsHexLength,
+        int searchFromOffset = 0)
     {
         ArgumentNullException.ThrowIfNull(pdf);
         if (contentsHexLength <= 0 || contentsHexLength % 2 != 0)
@@ -69,10 +72,25 @@ public static partial class PdfByteRangeHelper
             throw new ArgumentOutOfRangeException(nameof(contentsHexLength), "Contents hex length must be a positive even number.");
         }
 
-        // Match /Contents <hex...>
+        if (searchFromOffset < 0 || searchFromOffset > pdf.Length)
+        {
+            throw new ArgumentOutOfRangeException(nameof(searchFromOffset));
+        }
+
+        // Match the last /Contents <hex...> (the incremental signature dictionary).
         var ascii = Encoding.ASCII.GetString(pdf);
-        var match = ContentsPlaceholderRegex().Match(ascii);
-        if (!match.Success)
+        var matches = ContentsPlaceholderRegex().Matches(ascii);
+        Match? match = null;
+        for (var i = matches.Count - 1; i >= 0; i--)
+        {
+            if (matches[i].Index >= searchFromOffset)
+            {
+                match = matches[i];
+                break;
+            }
+        }
+
+        if (match is null)
         {
             throw new InvalidOperationException("PDF does not contain a /Contents <...> hex placeholder.");
         }
@@ -179,11 +197,13 @@ public static partial class PdfByteRangeHelper
     {
         ArgumentNullException.ThrowIfNull(pdf);
         var ascii = Encoding.ASCII.GetString(pdf);
-        var match = ContentsPlaceholderRegex().Match(ascii);
-        if (!match.Success)
+        var matches = ContentsPlaceholderRegex().Matches(ascii);
+        if (matches.Count == 0)
         {
             throw new InvalidOperationException("PDF does not contain a /Contents <...> value.");
         }
+
+        var match = matches[^1];
 
         var hex = match.Groups["hex"].Value;
         // Trim trailing padding zeros conservatively while keeping valid DER
