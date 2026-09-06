@@ -107,13 +107,30 @@ Kaynak kodu, tanımlayıcılar, loglar, testler ve commit mesajları yalnızca �
 
 ## Local infrastructure / Yerel altyapı
 
+Full stack (Postgres, RabbitMQ, Api, Worker, Web):
+
 ```bash
 cp .env.example .env
-docker compose up -d
+docker compose up -d --build
 docker compose ps
 ```
 
-Defaults: Postgres `localhost:5432` (`esign`/`esign`/`opensignature`), RabbitMQ `5672` + management UI `15672`. If host port `5432` is busy, set `POSTGRES_PORT=5433` in `.env` and match `ConnectionStrings:PostgreSQL` in the Api/Worker Development settings.
+| Service | URL |
+| --- | --- |
+| Web | http://localhost:5173 |
+| API | http://localhost:5270 |
+| API health | http://localhost:5270/health |
+| RabbitMQ UI | http://localhost:15672 |
+
+Infrastructure only (for host-run Api/Worker/Web):
+
+```bash
+docker compose up -d postgres rabbitmq
+```
+
+Defaults: Postgres `localhost:5432` (`esign`/`esign`/`opensignature`), RabbitMQ `5672` + management UI `15672`. If host port `5432` is busy, set `POSTGRES_PORT=5433` in `.env` (and match Development connection strings when running apps on the host).
+
+Compose uses a disposable development PFX (`pfx-init`) and `PFX_PASSWORD` from `.env`. USB / smart-card providers are disabled in containers — run Api/Worker on the host for PKCS#11.
 
 ## Start development apps / Geliştirmeyi başlatma
 

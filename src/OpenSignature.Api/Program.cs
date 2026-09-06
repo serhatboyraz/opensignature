@@ -93,19 +93,27 @@ builder.WebHost.ConfigureKestrel(options =>
 
 var app = builder.Build();
 
-if (app.Environment.IsDevelopment() || app.Environment.IsEnvironment("Testing"))
+if (app.Environment.IsDevelopment()
+    || app.Environment.IsEnvironment("Testing")
+    || app.Environment.IsEnvironment("Docker"))
 {
     app.MapOpenApi();
 }
 
-if (app.Environment.IsDevelopment() || app.Environment.IsEnvironment("Testing"))
+if (app.Environment.IsDevelopment()
+    || app.Environment.IsEnvironment("Testing")
+    || app.Environment.IsEnvironment("Docker"))
 {
     await using var scope = app.Services.CreateAsyncScope();
     var db = scope.ServiceProvider.GetRequiredService<OpenSignatureDbContext>();
     await db.Database.MigrateAsync();
 }
 
-app.UseHttpsRedirection();
+var urls = app.Configuration["ASPNETCORE_URLS"] ?? string.Empty;
+if (urls.Contains("https://", StringComparison.OrdinalIgnoreCase))
+{
+    app.UseHttpsRedirection();
+}
 app.UseAuthentication();
 app.UseMiddleware<TenantIsolationMiddleware>();
 app.UseAuthorization();

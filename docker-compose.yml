@@ -1,7 +1,28 @@
-# OpenSignature local development dependencies (PostgreSQL + RabbitMQ).
-# Copy .env.example to .env, then: docker compose up -d
+# OpenSignature local / full-stack Docker Compose.
+# Infrastructure only:  docker compose up -d postgres rabbitmq
+# Full stack:           docker compose up -d --build
+# Copy .env.example to .env first. Do not commit production secrets.
 
 name: opensignature
+
+x-app-environment: &app-environment
+  ASPNETCORE_ENVIRONMENT: Docker
+  DOTNET_ENVIRONMENT: Docker
+  ConnectionStrings__PostgreSQL: Host=postgres;Port=5432;Database=${POSTGRES_DB:-opensignature};Username=${POSTGRES_USER:-esign};Password=${POSTGRES_PASSWORD:-esign}
+  RabbitMq__Host: rabbitmq
+  RabbitMq__Port: "5672"
+  RabbitMq__User: ${RABBITMQ_DEFAULT_USER:-esign}
+  RabbitMq__Pass: ${RABBITMQ_DEFAULT_PASS:-esign}
+  RabbitMq__VHost: ${RABBITMQ_DEFAULT_VHOST:-/}
+  Storage__Local__RootPath: /data/storage
+  Signing__Pfx__Path: /data/certs/dev.pfx
+  Signing__Pfx__PasswordSecretName: Signing:Pfx:Password
+  Signing__SmartCard__AutoDetect: "false"
+  OPENSIGNATURE_SECRET_SIGNING_PFX_PASSWORD: ${PFX_PASSWORD:-opensignature-dev}
+  Timestamping__Url: ${TIMESTAMPING_URL:-}
+  Timestamping__Username: ${TIMESTAMPING_USERNAME:-}
+  Timestamping__PasswordSecretName: Timestamping:Password
+  OPENSIGNATURE_SECRET_TIMESTAMPING_PASSWORD: ${TIMESTAMPING_PASSWORD:-}
 
 services:
   postgres:
@@ -51,9 +72,110 @@ services:
       retries: 10
       start_period: 20s
 
+  pfx-init:
+    image: alpine:3.20
+    container_name: opensignature-pfx-init
+    volumes:
+      - certs_data:/certs
+      - ./docker/scripts/ensure-dev-pfx.sh:/ensure-dev-pfx.sh:ro
+    environment:
+      CERTS_DIR: /certs
+      PFX_PASSWORD: ${PFX_PASSWORD:-opensignature-dev}
+    entrypoint: ["/bin/sh", "/ensure-dev-pfx.sh"]
+    restart: "no"
+    networks:
+      - opensignature
+
+  api:
+    build:
+      context: .
+      dockerfile: docker/api/Dockerfile
+    image: opensignature-api:${IMAGE_TAG:-local}
+    container_name: opensignature-api
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+      pfx-init:
+        condition: service_completed_successfully
+    environment:
+      <<: *app-environment
+      ASPNETCORE_URLS: http://+:8080
+      RabbitMq__ClientProvidedName: opensignature-api
+    ports:
+      - "${API_PORT:-5270}:8080"
+    volumes:
+      - storage_data:/data/storage
+      - certs_data:/data/certs:ro
+    networks:
+      - opensignature
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "wget -qO- http://127.0.0.1:8080/health >/dev/null || exit 1",
+        ]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+      start_period: 45s
+
+  worker:
+    build:
+      context: .
+      dockerfile: docker/worker/Dockerfile
+    image: opensignature-worker:${IMAGE_TAG:-local}
+    container_name: opensignature-worker
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+      pfx-init:
+        condition: service_completed_successfully
+      api:
+        condition: service_healthy
+    environment:
+      <<: *app-environment
+      RabbitMq__ClientProvidedName: opensignature-worker
+    volumes:
+      - storage_data:/data/storage
+      - certs_data:/data/certs:ro
+    networks:
+      - opensignature
+
+  web:
+    build:
+      context: .
+      dockerfile: docker/web/Dockerfile
+      args:
+        VITE_API_BASE_URL: ${VITE_API_BASE_URL:-}
+        VITE_TENANT_ID: ${VITE_TENANT_ID:-tenant-demo}
+    image: opensignature-web:${IMAGE_TAG:-local}
+    container_name: opensignature-web
+    restart: unless-stopped
+    depends_on:
+      api:
+        condition: service_healthy
+    ports:
+      - "${WEB_PORT:-5173}:80"
+    networks:
+      - opensignature
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1/ >/dev/null || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
 volumes:
   postgres_data:
   rabbitmq_data:
+  storage_data:
+  certs_data:
 
 networks:
   opensignature:

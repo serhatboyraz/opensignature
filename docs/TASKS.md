@@ -835,9 +835,13 @@
   - `ci: add build and test pipeline`
 
 ### T141 — Container Images
-- Status: `TODO`
+- Status: `DONE`
 - Priority: P1
 - Depends on: T070
+- Scope:
+  - Dockerfiles for Api, Worker, and Web.
+  - Full-stack `docker-compose.yml` (Postgres, RabbitMQ, Api, Worker, Web, shared storage/certs).
+  - Ephemeral development PFX init for compose (never bake secrets into images).
 - Commit:
   - `build: add application container images`
 

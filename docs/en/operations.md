@@ -19,14 +19,27 @@ Readiness includes required dependencies (PostgreSQL, RabbitMQ, storage as confi
 - Provider and storage errors
 - Retry count and DLQ depth
 
-## Local infrastructure
+## Local stack
+
+Full stack:
 
 ```bash
-docker compose up -d
+cp .env.example .env
+docker compose up -d --build
 docker compose ps
 ```
 
-RabbitMQ management UI: http://localhost:15672
+| Service | URL |
+| --- | --- |
+| Web | http://localhost:5173 |
+| API | http://localhost:5270/health |
+| RabbitMQ UI | http://localhost:15672 |
+
+Infrastructure only: `docker compose up -d postgres rabbitmq`.
+
+Secrets: `PFX_PASSWORD`, optional `TIMESTAMPING_*` → `OPENSIGNATURE_SECRET_*` (see engineering operations).
+
+Full ops notes: [engineering operations source](engineering/operations.md).
 
 ## Worker retry defaults
 

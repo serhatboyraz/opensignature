@@ -1,35 +1,45 @@
 # Başlangıç
 
-OpenSignature’ı yerel olarak Docker (PostgreSQL + RabbitMQ), ASP.NET Core API, imza işçisi ve React arayüzü ile çalıştırın.
+OpenSignature’ı Docker Compose ile tam yığın olarak veya yalnızca altyapı container’ları + host’ta Api / Worker / Web ile çalıştırın.
 
 ## Önkoşullar
 
-- .NET 10 SDK
-- Node.js 20+
 - Docker Desktop (veya uyumlu motor)
-- Windows’ta PowerShell 7+ önerilir
+- Host geliştirmesi için: .NET 10 SDK, Node.js 20+, Windows’ta PowerShell 7+
 
-## 1. Ortam
+## 1. Docker Compose ile tam yığın
 
 ```bash
 cp .env.example .env
-docker compose up -d
+docker compose up -d --build
 docker compose ps
 ```
 
-Varsayılanlar:
-
 | Servis | Uç nokta |
 | --- | --- |
+| Web | http://localhost:5173 |
+| API | http://localhost:5270 |
+| API health | http://localhost:5270/health |
 | PostgreSQL | `localhost:5432` (`esign` / `esign` / `opensignature`) |
 | RabbitMQ AMQP | `localhost:5672` |
 | RabbitMQ UI | http://localhost:15672 |
 
-Host’ta `5432` doluysa `.env` içinde `POSTGRES_PORT=5433` ayarlayın ve Api/Worker Development bağlantı dizisini eşleştirin.
+`pfx-init` adlı birim volume’da geçici bir geliştirme PFX’i üretir. `.env` içinde `PFX_PASSWORD` (varsayılan `opensignature-dev`). İsteğe bağlı TSA: `TIMESTAMPING_URL` / `TIMESTAMPING_USERNAME` / `TIMESTAMPING_PASSWORD`.
 
-## 2. Tek komutla geliştirme
+Durdurma (volume’lar kalır):
 
 ```bash
+docker compose down
+```
+
+USB / akıllı kart imzalama container içinde yoktur — PKCS#11 için aşağıdaki host geliştirme yolunu kullanın.
+
+## 2. Tek komutla host geliştirme
+
+Yalnızca altyapı, ardından host’ta Api + Worker + Vite:
+
+```bash
+docker compose up -d postgres rabbitmq
 pwsh ./scripts/Start-Development.ps1
 ```
 
@@ -40,10 +50,12 @@ pwsh ./scripts/Start-Development.ps1
 
 İsteğe bağlı bayraklar: `-SkipInfrastructure`, `-SkipCertificate`, `-ApiProfile https`.
 
+Host’ta `5432` doluysa `.env` içinde `POSTGRES_PORT=5433` ayarlayın ve Api/Worker Development bağlantı dizisini eşleştirin.
+
 ## 3. Elle POC yolu
 
 ```bash
-docker compose up -d
+docker compose up -d postgres rabbitmq
 pwsh ./scripts/Generate-DevCertificate.ps1
 
 dotnet build OpenSignature.slnx
@@ -83,10 +95,10 @@ pip install -r requirements-docs.txt
 mkdocs serve
 ```
 
-http://127.0.0.1:8000 adresini açın — dil seçiciden English’e geçebilirsiniz.
+http://127.0.0.1:8000 — dil seçici ile English.
 
-## Sonraki adımlar
+## Sonraki
 
 - [Mimari](architecture.md)
-- [Akışlar ve diyagramlar](flows.md)
+- [Akışlar](flows.md)
 - [Operasyon](operations.md)

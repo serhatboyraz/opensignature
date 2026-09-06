@@ -1,15 +1,46 @@
 # Operations Guide
 
+## Docker Compose (full stack)
+
+From the repository root:
+
+```bash
+cp .env.example .env
+docker compose up -d --build
+```
+
+| Service | Host port (default) | Notes |
+| --- | --- | --- |
+| `web` | `5173` | nginx; proxies `/api` → `api:8080` |
+| `api` | `5270` | HTTP; migrates DB when `ASPNETCORE_ENVIRONMENT=Docker` |
+| `worker` | — | signing consumer; shares storage/certs volumes with Api |
+| `postgres` | `5432` | metadata |
+| `rabbitmq` | `5672` / `15672` | AMQP + management UI |
+| `pfx-init` | — | one-shot; writes `/certs/dev.pfx` (demo only) |
+
+Secrets in containers use `OPENSIGNATURE_SECRET_*` (see Security). Compose maps `PFX_PASSWORD` → `OPENSIGNATURE_SECRET_SIGNING_PFX_PASSWORD`. Optional TSA: `TIMESTAMPING_URL`, `TIMESTAMPING_USERNAME`, `TIMESTAMPING_PASSWORD`.
+
+Infrastructure only (host-run apps):
+
+```bash
+docker compose up -d postgres rabbitmq
+```
+
+Images: `docker/api/Dockerfile`, `docker/worker/Dockerfile`, `docker/web/Dockerfile`.
+
+USB / PKCS#11 tokens are not available in containers — run Api and Worker on the host for smart-card signing.
+
 ## Health endpoints
 
 Expose:
 
 ```text
+/health
 /health/live
 /health/ready
 ```
 
-Readiness must include required infrastructure dependencies.
+Compose currently probes Api `GET /health`. Readiness should include required infrastructure dependencies in production.
 
 ## Metrics
 

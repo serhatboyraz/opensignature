@@ -19,14 +19,27 @@ Hazırlık, yapılandırılmış bağımlılıkları (PostgreSQL, RabbitMQ, depo
 - Sağlayıcı ve depolama hataları
 - Yeniden deneme sayısı ve DLQ derinliği
 
-## Yerel altyapı
+## Yerel yığın
+
+Tam yığın:
 
 ```bash
-docker compose up -d
+cp .env.example .env
+docker compose up -d --build
 docker compose ps
 ```
 
-RabbitMQ yönetim arayüzü: http://localhost:15672
+| Servis | URL |
+| --- | --- |
+| Web | http://localhost:5173 |
+| API | http://localhost:5270/health |
+| RabbitMQ UI | http://localhost:15672 |
+
+Yalnızca altyapı: `docker compose up -d postgres rabbitmq`.
+
+Sırlar: `PFX_PASSWORD`, isteğe bağlı `TIMESTAMPING_*` → `OPENSIGNATURE_SECRET_*` (mühendislik operasyon kaynağına bakın).
+
+Tam operasyon notları: [mühendislik operasyon kaynağı](engineering/operations.md).
 
 ## İşçi yeniden deneme varsayılanları
 
