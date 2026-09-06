@@ -12,6 +12,7 @@ The product / project name is **OpenSignature**.
 - Do not invent alternate product names (e.g. "E-Signature Platform" alone without OpenSignature) in new UI or docs.
 
 Follow `.cursor/skills/esign-platform-development/SKILL.md`.
+Follow `.cursor/skills/commit-after-task/SKILL.md` after every completed task.
 
 Use `docs/PRODUCT-SPEC.en.md` and `docs/TASKS.md` as the primary engineering sources of truth.
 
@@ -25,4 +26,4 @@ Do not put document binaries in RabbitMQ messages.
 
 Do not expose or export private keys from HSM/smart-card/PKCS#11 providers.
 
-Use meaningful Conventional Commits after completed tasks.
+After every completed task, create a Conventional Commit with a meaningful English message. Do not leave completed work uncommitted.

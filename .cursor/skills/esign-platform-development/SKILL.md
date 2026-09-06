@@ -34,6 +34,7 @@ You must use the specifications as the source of truth and implement the product
 15. Never commit PFX files, certificates containing private keys, credentials or secrets.
 16. Do not silently downgrade a requested signature profile.
 17. Push to remote only when explicitly requested by the user.
+18. After every completed task, create a Conventional Commit with a meaningful English message. Do not leave completed work uncommitted. Follow `.cursor/skills/commit-after-task/SKILL.md`.
 
 ## Task Selection
 
@@ -74,44 +75,11 @@ Do not skip tests.
 
 ## Commit Policy
 
-Use Conventional Commits.
+Follow `.cursor/skills/commit-after-task/SKILL.md`.
 
-Examples:
+After **every** completed task, create a Conventional Commit with a meaningful English message. Do not leave completed work uncommitted.
 
-```text
-feat(api): add asynchronous signature request endpoint
-feat(signing): add PAdES baseline B signer
-feat(queue): add RabbitMQ signing worker
-feat(storage): add local file storage adapter
-test(signing): add PAdES interoperability tests
-fix(worker): prevent duplicate job processing
-docs(api): document signature endpoints
-refactor(signing): extract signing provider abstraction
-```
-
-Avoid meaningless messages:
-
-```text
-update
-changes
-fix
-work
-final
-stuff
-test
-```
-
-After an important task or coherent task group:
-
-```text
-git status
-git diff
-dotnet test
-git add <relevant files>
-git commit -m "<conventional commit message>"
-```
-
-Never commit unrelated changes.
+Never commit unrelated changes, secrets, private keys, PFX files, or credentials.
 
 ## Architecture Rules
 
