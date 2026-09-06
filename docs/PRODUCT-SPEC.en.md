@@ -553,12 +553,13 @@ ITimestampAuthority
 Implement RFC 3161 with:
 
 - TSA URL
+- optional HTTP Basic Auth (`Timestamping:Username` plus `PasswordSecretName` / secret store; never commit passwords)
 - nonce
 - message imprint
 - timestamp token
 - certificate validation.
 
-Worker default: no TSA until `Timestamping:Url` is configured. Tests may use an in-process RFC 3161 TSA whose private key is never exported.
+Worker default: no TSA until `Timestamping:Url` is configured. Tests may use an in-process RFC 3161 TSA whose private key is never exported. Anonymous TSAs omit the `Authorization` header.
 
 A requested T/LT/LTA profile must never silently downgrade to B when timestamping fails.
 

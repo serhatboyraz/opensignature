@@ -505,6 +505,19 @@
 - Commit:
   - `feat(timestamp): add RFC 3161 timestamp provider`
 
+### T082a — TSA HTTP Basic Auth
+- Status: `DONE`
+- Priority: P1
+- Depends on: T082, T113
+- Scope:
+  - Optional RFC 3161 HTTP Basic Auth (`Timestamping:Username`).
+  - Password via `PasswordSecretName` / `ISigningSecretProvider` (no committed secrets).
+  - Omit `Authorization` when credentials are not configured.
+- Tests:
+  - `Rfc3161TimestampAuthorityTests` Basic Auth header and secret resolution.
+- Commit:
+  - `feat(timestamp): add RFC 3161 TSA Basic Auth`
+
 ### T083 — PAdES-T/LT/LTA
 - Status: `DONE`
 - Priority: P1

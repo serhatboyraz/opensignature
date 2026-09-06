@@ -228,7 +228,10 @@ public static class SigningServiceCollectionExtensions
         services.AddSingleton<Application.Abstractions.Timestamping.ITimestampAuthority>(sp =>
         {
             var http = new HttpClient { Timeout = options.Timeout };
-            return new Timestamping.Rfc3161TimestampAuthority(http, options);
+            return new Timestamping.Rfc3161TimestampAuthority(
+                http,
+                options,
+                sp.GetService<ISigningSecretProvider>());
         });
         return services;
     }

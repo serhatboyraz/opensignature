@@ -57,11 +57,14 @@ T/LT/LTA bir TSA gerektirir. İşçide yapılandırın:
 ```json
 "Timestamping": {
   "Url": "https://tsa.example.invalid/",
-  "PolicyOid": ""
+  "PolicyOid": "",
+  "Username": "",
+  "PasswordSecretName": "Timestamping:Password"
 }
 ```
 
-Eksik TSA → `TIMESTAMP_AUTHORITY_UNAVAILABLE` (B’ye sessiz düşüş yok).
+Eksik TSA → `TIMESTAMP_AUTHORITY_UNAVAILABLE` (B’ye sessiz düşüş yok).  
+HTTP Basic Auth: `Username` doldurun; parolayı user secrets / `PasswordSecretName` ile verin. Anonim TSA için `Username` boş kalsın.
 
 ## Olay kontrol listesi
 

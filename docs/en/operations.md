@@ -57,11 +57,14 @@ T/LT/LTA require a TSA. Configure on the worker:
 ```json
 "Timestamping": {
   "Url": "https://tsa.example.invalid/",
-  "PolicyOid": ""
+  "PolicyOid": "",
+  "Username": "",
+  "PasswordSecretName": "Timestamping:Password"
 }
 ```
 
-Missing TSA → `TIMESTAMP_AUTHORITY_UNAVAILABLE` (no silent downgrade to B).
+Missing TSA → `TIMESTAMP_AUTHORITY_UNAVAILABLE` (no silent downgrade to B).  
+HTTP Basic Auth: set `Username` and store the password via user secrets / `PasswordSecretName`. Leave `Username` empty for anonymous TSAs.
 
 ## Incident checklist
 

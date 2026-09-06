@@ -86,11 +86,23 @@ Set `Timestamping:Url` on the worker to enable the HTTP RFC 3161 client:
 ```json
 "Timestamping": {
   "Url": "https://tsa.example.invalid/",
-  "PolicyOid": ""
+  "PolicyOid": "",
+  "Username": "",
+  "PasswordSecretName": "Timestamping:Password"
 }
 ```
 
-HTTP TSA failures are classified as retryable (`TIMESTAMP_OPERATION_FAILED`) until the bounded retry budget is exhausted.
+Anonymous TSAs (for example FreeTSA) leave `Username` empty so no `Authorization` header is sent.
+
+When the TSA requires HTTP Basic Auth, set `Username` and store the password in user secrets (never in git):
+
+```bash
+dotnet user-secrets set "Secrets:Values:Timestamping:Password" "<tsa-password>" --project src/OpenSignature.Worker
+```
+
+`PasswordSecretName` is the lookup key (`Timestamping:Password`). Production should resolve the same name from the secret store or `OPENSIGNATURE_SECRET_TIMESTAMPING_PASSWORD`. Do not commit TSA passwords. Optional development-only `Timestamping:Password` is overridden when `PasswordSecretName` is set and a username is present.
+
+HTTP TSA failures are classified as retryable (`TIMESTAMP_OPERATION_FAILED`) until the bounded retry budget is exhausted. A password without a username is a permanent configuration error.
 
 LT/LTA also require CRL or OCSP evidence registered via `AddLongTermValidationData`. The default provider only includes the signing certificate, so LT/LTA fail with `SIGNATURE_VALIDATION_DATA_UNAVAILABLE` until revocation material is supplied. OpenSignature does not fabricate timestamps or revocation data.
 

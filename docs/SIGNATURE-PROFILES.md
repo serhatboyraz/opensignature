@@ -39,12 +39,15 @@ The worker enables an HTTP RFC 3161 client when `Timestamping:Url` is set:
 ```json
 "Timestamping": {
   "Url": "https://tsa.example.invalid/",
-  "PolicyOid": ""
+  "PolicyOid": "",
+  "Username": "",
+  "PasswordSecretName": "Timestamping:Password"
 }
 ```
 
-- HTTP TSA: `AddRfc3161TimestampAuthority` (`application/timestamp-query`, nonce, imprint, token validation).
+- HTTP TSA: `AddRfc3161TimestampAuthority` (`application/timestamp-query`, nonce, imprint, token validation, optional HTTP Basic Auth).
 - In-process TSA: `AddLocalRfc3161TimestampAuthority` (tests and local development; the TSA private key stays inside that type and is never exported).
+- Basic Auth: set `Username`; resolve the password via `PasswordSecretName` / `ISigningSecretProvider`. Omit `Username` for anonymous TSAs.
 
 ### Long-term validation data
 

@@ -21,7 +21,7 @@ OpenSignature resolves named secrets through `ISecretStore` (Application abstrac
 | `EnvironmentSecretStore` | `OPENSIGNATURE_SECRET_{NAME}` (':' / '.' / '-' → `_`) |
 | `RotatingSecretStore` | Wrapper with a rotation hook (`NotifyRotatedAsync`); MVP delegates to the inner chain |
 
-Api and Worker register a rotating chain (configuration, then environment). Signing adapts the store via `SecretStoreSigningSecretProvider` → `ISigningSecretProvider` for PFX password resolution (`Signing:Pfx:PasswordSecretName`).
+Api and Worker register a rotating chain (configuration, then environment). Signing adapts the store via `SecretStoreSigningSecretProvider` → `ISigningSecretProvider` for PFX passwords (`Signing:Pfx:PasswordSecretName`), token PINs (`PinSecretName`), and TSA Basic Auth (`Timestamping:PasswordSecretName`).
 
 Never log secret values, PINs, or PFX passwords.
 

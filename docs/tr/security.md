@@ -20,7 +20,7 @@ Adlandırılmış sırlar `ISecretStore` üzerinden çözülür:
 | `EnvironmentSecretStore` | `OPENSIGNATURE_SECRET_{NAME}` |
 | `RotatingSecretStore` | İç zincir üzerinde rotasyon kancası |
 
-İmza parola/PIN’leri `ISigningSecretProvider` kullanır (`PasswordSecretName` / `PinSecretName`).
+İmza parola/PIN/TSA kimlik bilgileri `ISigningSecretProvider` kullanır (`PasswordSecretName` / `PinSecretName` / `Timestamping:PasswordSecretName`).
 
 ## Kimlik doğrulama ve RBAC
 

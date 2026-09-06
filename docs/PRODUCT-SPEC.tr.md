@@ -648,12 +648,13 @@ ITimestampAuthority
 RFC 3161:
 
 - TSA URL
+- isteğe bağlı HTTP Basic Auth (`Timestamping:Username` ve `PasswordSecretName` / secret store; parolalar commit edilmez)
 - nonce
 - message imprint
 - timestamp token
 - certificate validation.
 
-Worker varsayılanı: `Timestamping:Url` yapılandırılana kadar TSA yoktur. Testler, özel anahtarı dışa aktarmayan süreç-içi RFC 3161 TSA kullanabilir.
+Worker varsayılanı: `Timestamping:Url` yapılandırılana kadar TSA yoktur. Testler, özel anahtarı dışa aktarmayan süreç-içi RFC 3161 TSA kullanabilir. Anonim TSA’larda `Authorization` başlığı gönderilmez.
 
 Timestamp failures must never silently downgrade a requested T/LT/LTA signature to B.
 

@@ -20,7 +20,7 @@ Named secrets resolve through `ISecretStore`:
 | `EnvironmentSecretStore` | `OPENSIGNATURE_SECRET_{NAME}` |
 | `RotatingSecretStore` | Rotation hook over an inner chain |
 
-Signing passwords/PINs use `ISigningSecretProvider` (`PasswordSecretName` / `PinSecretName`).
+Signing passwords/PINs/TSA credentials use `ISigningSecretProvider` (`PasswordSecretName` / `PinSecretName` / `Timestamping:PasswordSecretName`).
 
 ## Authentication & RBAC
 
