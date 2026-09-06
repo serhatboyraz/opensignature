@@ -1,11 +1,11 @@
 /**
- * API base URL from env. When unset, defaults to the Api https launch profile
- * (https://localhost:7010). An empty string uses same-origin paths (Vite proxy).
+ * API base URL from env. When unset or empty, uses same-origin paths (Vite `/api` proxy
+ * → http://localhost:5270 by default). Set VITE_API_BASE_URL to call the API directly.
  */
 export function getApiBaseUrl(): string {
   const raw = import.meta.env.VITE_API_BASE_URL
-  if (raw === undefined) {
-    return 'https://localhost:7010'
+  if (raw === undefined || raw === '') {
+    return ''
   }
   return raw.replace(/\/$/, '')
 }

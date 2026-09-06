@@ -1,8 +1,9 @@
 import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
 
-// Api https profile: https://localhost:7010 (see OpenSignature.Api Properties/launchSettings.json)
-const apiTarget = process.env.VITE_PROXY_TARGET ?? 'https://localhost:7010'
+// Default matches Api "http" launch profile (see OpenSignature.Api Properties/launchSettings.json).
+// Override with VITE_PROXY_TARGET=https://localhost:7010 if using the https profile.
+const apiTarget = process.env.VITE_PROXY_TARGET ?? 'http://localhost:5270'
 
 export default defineConfig({
   plugins: [react()],
