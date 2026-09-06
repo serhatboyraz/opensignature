@@ -54,7 +54,7 @@ Additional categories (expand as the product matures): API contract checks, secu
 | `OpenSignature.Application.Tests` | Unit | Command/query handlers, validators, idempotency handling, provider selection policy, DTO mapping |
 | `OpenSignature.Infrastructure.Tests` | Unit + integration | Storage key builders, file storage adapters, EF repositories/migrations, outbox persistence; PG via Testcontainers when needed |
 | `OpenSignature.Signing.Tests` | Unit + signing | Format/profile builders, crypto helpers, PFX (dev) provider behavior with **local-only** key material, provider failure modes |
-| `OpenSignature.Api.IntegrationTests` | Integration | Minimal API endpoints, Problem Details, `202 Accepted`, authz/tenant checks, upload limits, OpenAPI smoke |
+| `OpenSignature.Api.IntegrationTests` | Integration | Minimal API endpoints, Problem Details, `202 Accepted`, authz/tenant checks, upload limits, OpenAPI smoke, signature verification reports |
 | `OpenSignature.Worker.IntegrationTests` | Integration + E2E | Message consume, job lock/idempotency, retries/DLQ, restart safety, full pipeline to completed state |
 | `OpenSignature.Interop.Tests` | Crypto interop | Independent validation of generated signatures; positive and negative cases per format/profile |
 
@@ -109,7 +109,7 @@ For each supported format/profile, cover at least:
 | Expired certificate | Rejected or validation fails as designed |
 | Missing certificate / provider failure | Permanent failure; no infinite retry |
 
-Use an **independent** validator/library. Document known interoperability limitations; do not claim unsupported profiles.
+Use an **independent** validator/library. Document known interoperability limitations; do not claim unsupported profiles. T/LT/LTA tests use an in-process RFC 3161 TSA and injected CRL/OCSP material — never fabricated timestamps or revocation evidence.
 
 ## 5. Local vs CI execution
 

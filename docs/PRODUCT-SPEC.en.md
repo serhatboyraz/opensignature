@@ -133,6 +133,7 @@ Client
   |
   | GET status
   | GET signed content
+  | GET verification report
 ```
 
 RabbitMQ must not carry document binaries.
@@ -355,7 +356,18 @@ GET /api/v1/providers
 GET /api/v1/providers/{id}/health
 ```
 
-Validation APIs are a later milestone.
+### Verification
+
+```text
+GET  /api/v1/signatures/{id}/verification
+POST /api/v1/verifications
+```
+
+`GET /api/v1/signatures/{id}/verification` verifies a completed platform signature and returns a detailed report (overall status, cryptographic check, certificate path, revocation, reason codes). Available only when status is `Completed`.
+
+`POST /api/v1/verifications` accepts an uploaded signed document (`multipart/form-data`: `file`, `format`, optional `originalFile` for detached CAdES). The upload is verified in memory and is not stored.
+
+Verification covers Baseline B CAdES, XAdES, and PAdES cryptographic checks plus certificate path validation. It is not a full ETSI EN 319 102-1 AdES conformance report.
 
 ## 11. Idempotency
 
@@ -478,9 +490,10 @@ Later:
 
 - signature field reuse
 - multiple signatures
-- VRI dictionary.
-
-Implemented (Phase 8): RFC 3161 signature timestamp (T), DSS with certificates/CRLs/OCSPs (LT), document timestamp `/SubFilter /ETSI.RFC3161` (LTA). Profiles never silently downgrade.
+- timestamp
+- LT/LTA
+- DSS/VRI validation data
+- archival timestamp.
 
 ## 16. XAdES
 
@@ -495,10 +508,13 @@ MVP:
 
 Later:
 
+- T
+- LT
+- LTA
 - multiple signatures
-- signature policy.
-
-Implemented (Phase 8): T (`SignatureTimeStamp`), LT (`CertificateValues` / `RevocationValues`), LTA (`ArchiveTimeStamp`). Profiles never silently downgrade.
+- signature policy
+- timestamps
+- OCSP/CRL evidence.
 
 ## 17. CAdES
 
@@ -511,21 +527,24 @@ MVP:
 
 Later:
 
-- signature policy.
-
-Implemented (Phase 8): T (signature timestamp token), LT (certificate/revocation values), LTA (archive timestamp). Profiles never silently downgrade.
+- T
+- LT
+- LTA
+- signature policy
+- validation data
+- archival timestamp.
 
 ## 18. ASiC
 
 ASiC-S:
 
-- one associated signature/data package (ZIP, uncompressed `mimetype` first, detached CAdES in `META-INF/signature.p7s`).
+- one associated signature/data package.
 
 ASiC-E:
 
-- multiple data objects and signatures (`ASiCManifest.xml` plus CAdES over the manifest).
+- multiple data objects and signatures.
 
-Use ZIP-based containers and validate package relationships. T/LT/LTA apply to the inner CAdES.
+Use ZIP-based containers and validate package relationships.
 
 ## 19. Timestamp Authority
 
@@ -545,8 +564,6 @@ Implement RFC 3161 with:
 - message imprint
 - timestamp token
 - certificate validation.
-
-Worker default: no TSA until `Timestamping:Url` is configured. Tests may use an in-process RFC 3161 TSA whose private key is never exported.
 
 A requested T/LT/LTA profile must never silently downgrade to B when timestamping fails.
 

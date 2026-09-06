@@ -3,6 +3,7 @@ import { Layout } from './components/Layout'
 import { StubPage } from './components/StubPage'
 import { CertificatesPage } from './pages/CertificatesPage'
 import { ProvidersPage } from './pages/ProvidersPage'
+import { VerifyPage } from './pages/VerifyPage'
 import { SignatureDashboardPage } from './pages/SignatureDashboardPage'
 import { SignatureDetailPage } from './pages/SignatureDetailPage'
 
@@ -31,6 +32,7 @@ export default function App() {
             }
           />
           <Route path="signatures/:id" element={<SignatureDetailPage />} />
+          <Route path="verify" element={<VerifyPage />} />
           <Route path="certificates" element={<CertificatesPage />} />
           <Route path="providers" element={<ProvidersPage />} />
           <Route

@@ -63,6 +63,16 @@ Poll status, then download when `Completed`:
 ```bash
 curl -s "http://localhost:5270/api/v1/signatures/{id}" -H "X-Tenant-Id: tenant-demo"
 curl -s -o signed.bin "http://localhost:5270/api/v1/signatures/{id}/content" -H "X-Tenant-Id: tenant-demo"
+curl -s "http://localhost:5270/api/v1/signatures/{id}/verification" -H "X-Tenant-Id: tenant-demo"
+```
+
+Ad-hoc verification of an already-signed file:
+
+```bash
+curl -s -X POST "http://localhost:5270/api/v1/verifications" \
+  -H "X-Tenant-Id: tenant-demo" \
+  -F "file=@signed.bin;type=application/pkcs7-mime" \
+  -F "format=CAdES"
 ```
 
 Supported MVP formats: **CAdES-B**, **XAdES-B**, **PAdES-B** via the development PFX provider. Sample inputs live under `samples/`.

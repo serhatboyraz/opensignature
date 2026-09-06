@@ -120,5 +120,11 @@ public sealed class OpenApiSmokeTests : IAsyncLifetime
         Assert.True(
             paths.EnumerateObject().Any(p => p.Name.Contains("/api/v1/signatures", StringComparison.Ordinal)),
             "OpenAPI document should include /api/v1/signatures paths.");
+        Assert.True(
+            paths.EnumerateObject().Any(p => p.Name.Contains("/verification", StringComparison.Ordinal)),
+            "OpenAPI document should include signature verification paths.");
+        Assert.True(
+            paths.EnumerateObject().Any(p => p.Name.Contains("/api/v1/verifications", StringComparison.Ordinal)),
+            "OpenAPI document should include ad-hoc verification paths.");
     }
 }

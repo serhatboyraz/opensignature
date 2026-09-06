@@ -21,6 +21,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\..\src\OpenSignature.Api\OpenSignature.Api.csproj" />
+    <ProjectReference Include="..\..\src\OpenSignature.Signing\OpenSignature.Signing.csproj" />
   </ItemGroup>
 
 </Project>

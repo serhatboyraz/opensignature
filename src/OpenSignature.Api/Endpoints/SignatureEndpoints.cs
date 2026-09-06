@@ -3,8 +3,10 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Options;
 using OpenSignature.Api.Security;
 using OpenSignature.Application.Abstractions.Signatures;
+using OpenSignature.Application.Abstractions.Verification;
 using OpenSignature.Application.Security;
 using OpenSignature.Application.Signatures;
+using OpenSignature.Application.Verification;
 using OpenSignature.Domain.Enums;
 using OpenSignature.Domain.ValueObjects;
 
@@ -82,6 +84,21 @@ public static class SignatureEndpoints
         if (requireAuthorization)
         {
             cancel.RequireAuthorization(OpenSignaturePolicies.SignaturesCancel);
+        }
+
+        var verify = group.MapGet("/{id:guid}/verification", VerifySignatureAsync)
+            .WithName("VerifySignature")
+            .WithSummary("Verify signed content")
+            .WithDescription(
+                "Runs cryptographic and certificate verification on the stored signed output. " +
+                "Available when status is Completed. Returns a detailed report (overall status, crypto, certificate path, revocation, reason codes). " +
+                "Does not perform signing.")
+            .Produces(StatusCodes.Status200OK)
+            .ProducesProblem(StatusCodes.Status404NotFound)
+            .ProducesProblem(StatusCodes.Status409Conflict);
+        if (requireAuthorization)
+        {
+            verify.RequireAuthorization(OpenSignaturePolicies.SignaturesRead);
         }
 
         return endpoints;
@@ -189,6 +206,7 @@ public static class SignatureEndpoints
             idempotencyKey = idempotencyHeader.ToString();
         }
 
+        string? createdBy = "api";
         bool visibleSignature = ParseBoolean(form["visibleSignature"]);
         var signatureNote = form["signatureNote"].ToString();
         var appearancePage = ParsePositiveInt(form["signaturePage"]) ?? 1;
@@ -226,20 +244,20 @@ public static class SignatureEndpoints
                         AppearanceImageContentType = appearanceImageContentType,
                         IdempotencyKey = idempotencyKey,
                         CorrelationId = correlationId,
-                        CreatedBy = "api"
+                        CreatedBy = createdBy
                     },
                     cancellationToken)
                 .ConfigureAwait(false);
 
-                return Results.Accepted(
-                    result.StatusUrl,
-                    new
-                    {
-                        id = result.Id,
-                        status = result.Status.ToString(),
-                        createdAt = result.CreatedAt,
-                        statusUrl = result.StatusUrl
-                    });
+            return Results.Accepted(
+                result.StatusUrl,
+                new
+                {
+                    id = result.Id,
+                    status = result.Status.ToString(),
+                    createdAt = result.CreatedAt,
+                    statusUrl = result.StatusUrl
+                });
             }
             catch (SignatureRequestValidationException ex)
             {
@@ -381,6 +399,64 @@ public static class SignatureEndpoints
                 errorCode: "SIGNING_OPERATION_FAILED")
         };
     }
+
+    private static async Task<IResult> VerifySignatureAsync(
+        Guid id,
+        HttpRequest request,
+        ISignatureVerificationService verification,
+        IOptions<SignatureApiOptions> options,
+        CancellationToken cancellationToken)
+    {
+        TenantId tenantId;
+        try
+        {
+            tenantId = ResolveTenantId(request, options.Value);
+        }
+        catch (ArgumentException ex)
+        {
+            return Problem(
+                statusCode: StatusCodes.Status400BadRequest,
+                title: "Invalid tenant",
+                detail: ex.Message,
+                errorCode: "SIGNATURE_REQUEST_INVALID");
+        }
+
+        var result = await verification.VerifyStoredAsync(tenantId, id, cancellationToken)
+            .ConfigureAwait(false);
+
+        return MapVerificationOutcome(result);
+    }
+
+    private static IResult MapVerificationOutcome(SignatureVerificationOutcome result)
+        => result switch
+        {
+            SignatureVerificationOutcome.Success success => Results.Ok(success.Report),
+            SignatureVerificationOutcome.NotFound => Problem(
+                statusCode: StatusCodes.Status404NotFound,
+                title: "Signature not found",
+                detail: "Signature request was not found for the tenant.",
+                errorCode: "SIGNATURE_INPUT_NOT_FOUND"),
+            SignatureVerificationOutcome.NotReady notReady => Problem(
+                statusCode: StatusCodes.Status409Conflict,
+                title: "Signed content not available",
+                detail: notReady.Detail,
+                errorCode: notReady.ErrorCode),
+            SignatureVerificationOutcome.InvalidRequest invalid => Problem(
+                statusCode: StatusCodes.Status400BadRequest,
+                title: "Invalid request",
+                detail: invalid.Detail,
+                errorCode: invalid.ErrorCode),
+            SignatureVerificationOutcome.TooLarge tooLarge => Problem(
+                statusCode: StatusCodes.Status413PayloadTooLarge,
+                title: "Payload too large",
+                detail: tooLarge.Detail,
+                errorCode: tooLarge.ErrorCode),
+            _ => Problem(
+                statusCode: StatusCodes.Status500InternalServerError,
+                title: "Unexpected verification result",
+                detail: "An unexpected verification result was returned.",
+                errorCode: "SIGNING_OPERATION_FAILED")
+        };
 
     private static TenantId ResolveTenantId(HttpRequest request, SignatureApiOptions options)
     {

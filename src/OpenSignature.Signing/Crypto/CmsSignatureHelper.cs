@@ -84,6 +84,30 @@ public static class CmsSignatureHelper
     }
 
     /// <summary>
+    /// Returns the DER-encoded CMS object, stripping PDF Contents zero-padding when present.
+    /// </summary>
+    public static byte[] TrimEncodedCms(byte[] cmsBytes)
+    {
+        ArgumentNullException.ThrowIfNull(cmsBytes);
+        if (cmsBytes.Length < 2 || cmsBytes[0] != 0x30)
+        {
+            return cmsBytes;
+        }
+
+        try
+        {
+            using var parser = new Org.BouncyCastle.Asn1.Asn1InputStream(cmsBytes);
+            var obj = parser.ReadObject()
+                ?? throw new InvalidOperationException("CMS DER object was empty.");
+            return obj.GetEncoded();
+        }
+        catch (Exception)
+        {
+            return cmsBytes;
+        }
+    }
+
+    /// <summary>
     /// Validates a CMS signature. For detached signatures, pass the original content;
     /// for attached signatures, <paramref name="detachedContent"/> may be null.
     /// </summary>

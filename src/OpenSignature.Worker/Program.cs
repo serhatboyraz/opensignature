@@ -6,6 +6,7 @@ using OpenSignature.Infrastructure.Secrets;
 using OpenSignature.Infrastructure.Storage;
 using OpenSignature.Signing;
 using OpenSignature.Signing.Pfx;
+using OpenSignature.Signing.Timestamping;
 using OpenSignature.Worker.Messaging;
 
 var builder = Host.CreateApplicationBuilder(args);
@@ -41,6 +42,12 @@ builder.Services.AddSignatureEngine(options =>
             Path.Combine(builder.Environment.ContentRootPath, "..", "..", options.Path.Replace("./", string.Empty)));
     }
 });
+
+var timestamping = builder.Configuration.GetSection(Rfc3161TimestampAuthorityOptions.SectionName);
+if (!string.IsNullOrWhiteSpace(timestamping["Url"]))
+{
+    builder.Services.AddRfc3161TimestampAuthority(options => timestamping.Bind(options));
+}
 
 builder.Services.AddSingleton(TimeProvider.System);
 builder.Services.AddScoped<ISigningJobProcessor, SignatureSigningJobProcessor>();

@@ -172,6 +172,30 @@ public sealed class SignatureSigningJobProcessor : ISigningJobProcessor
                 .ConfigureAwait(false);
             throw new PermanentSigningJobException(ex.Message, ex);
         }
+        catch (TimestampAuthorityUnavailableException ex)
+        {
+            await MarkFailedAsync(
+                    request,
+                    job,
+                    ex.ErrorCode,
+                    ex.Message,
+                    ex,
+                    cancellationToken)
+                .ConfigureAwait(false);
+            throw new PermanentSigningJobException(ex.Message, ex);
+        }
+        catch (LongTermValidationDataUnavailableException ex)
+        {
+            await MarkFailedAsync(
+                    request,
+                    job,
+                    ex.ErrorCode,
+                    ex.Message,
+                    ex,
+                    cancellationToken)
+                .ConfigureAwait(false);
+            throw new PermanentSigningJobException(ex.Message, ex);
+        }
         catch (NotImplementedException ex)
         {
             await MarkFailedAsync(

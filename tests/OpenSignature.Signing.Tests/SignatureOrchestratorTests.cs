@@ -67,6 +67,26 @@ public sealed class SignatureOrchestratorTests
             certificateSelector: null);
         Assert.Equal(SignatureFormat.PAdES, pades.Format);
         await using (pades.Content) { }
+
+        await using var asicInput = new MemoryStream(Encoding.UTF8.GetBytes("orchestrator-asic-s"));
+        var asic = await orchestrator.SignAsync(
+            asicInput,
+            SignatureFormat.ASiC_S,
+            SignatureProfile.B,
+            SigningProviderType.Pfx,
+            certificateSelector: null);
+        Assert.Equal(SignatureFormat.ASiC_S, asic.Format);
+        Assert.Equal("application/vnd.etsi.asic-s+zip", asic.ContentType);
+        await using var asicEInput = new MemoryStream(Encoding.UTF8.GetBytes("orchestrator-asic-e"));
+        var asicE = await orchestrator.SignAsync(
+            asicEInput,
+            SignatureFormat.ASiC_E,
+            SignatureProfile.B,
+            SigningProviderType.Pfx,
+            certificateSelector: null);
+        Assert.Equal(SignatureFormat.ASiC_E, asicE.Format);
+        Assert.Equal("application/vnd.etsi.asic-e+zip", asicE.ContentType);
+        await using (asicE.Content) { }
     }
 
     [Fact]
@@ -152,7 +172,7 @@ public sealed class SignatureOrchestratorTests
     }
 
     [Fact]
-    public async Task Unsupported_profile_is_rejected_without_downgrade()
+    public async Task T_profile_without_tsa_is_rejected_without_downgrade()
     {
         using var material = EphemeralPfx.CreateRsa(
             "CN=OpenSignature Profile Reject",
@@ -173,7 +193,7 @@ public sealed class SignatureOrchestratorTests
         var orchestrator = provider.GetRequiredService<ISignatureCreationService>();
 
         await using var input = new MemoryStream(Encoding.UTF8.GetBytes("data"));
-        var ex = await Assert.ThrowsAsync<UnsupportedSignatureProfileException>(() =>
+        var ex = await Assert.ThrowsAsync<TimestampAuthorityUnavailableException>(() =>
             orchestrator.SignAsync(
                 input,
                 SignatureFormat.CAdES,
@@ -181,12 +201,11 @@ public sealed class SignatureOrchestratorTests
                 SigningProviderType.Pfx,
                 certificateSelector: null));
 
-        Assert.Equal(SignatureProfile.T, ex.RequestedProfile);
-        Assert.Equal("SIGNATURE_PROFILE_UNSUPPORTED", ex.ErrorCode.Value);
+        Assert.Equal("TIMESTAMP_AUTHORITY_UNAVAILABLE", ex.ErrorCode.Value);
     }
 
     [Fact]
-    public async Task Unsupported_format_is_rejected()
+    public async Task Unknown_format_is_rejected()
     {
         using var material = EphemeralPfx.CreateRsa(
             "CN=OpenSignature Format Reject",
@@ -210,12 +229,11 @@ public sealed class SignatureOrchestratorTests
         var ex = await Assert.ThrowsAsync<UnsupportedSignatureFormatException>(() =>
             orchestrator.SignAsync(
                 input,
-                SignatureFormat.ASiC_S,
+                (SignatureFormat)999,
                 SignatureProfile.B,
                 SigningProviderType.Pfx,
                 certificateSelector: null));
 
-        Assert.Equal(SignatureFormat.ASiC_S, ex.RequestedFormat);
         Assert.Equal("SIGNATURE_FORMAT_UNSUPPORTED", ex.ErrorCode.Value);
     }
 }

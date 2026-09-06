@@ -156,6 +156,7 @@ Client
   |
   | GET /api/v1/signatures/{id}
   | GET /api/v1/signatures/{id}/content
+  | GET /api/v1/signatures/{id}/verification
   v
 Signed File
 ```
@@ -429,14 +430,18 @@ GET /api/v1/providers
 GET /api/v1/providers/{id}/health
 ```
 
-### Validation endpoints
-
-İkinci faz:
+### Doğrulama
 
 ```text
-POST /api/v1/validation
-GET /api/v1/validation/{id}
+GET  /api/v1/signatures/{id}/verification
+POST /api/v1/verifications
 ```
+
+`GET /api/v1/signatures/{id}/verification` tamamlanmış bir platform imzasını doğrular ve ayrıntılı rapor döner (genel durum, kriptografik kontrol, sertifika yolu, iptal, neden kodları). Yalnızca `Completed` durumunda kullanılabilir.
+
+`POST /api/v1/verifications` yüklenen imzalı bir belgeyi doğrular (`multipart/form-data`: `file`, `format`, ayrık CAdES için isteğe bağlı `originalFile`). Yüklenen dosya bellekte doğrulanır ve saklanmaz.
+
+Doğrulama Baseline B CAdES, XAdES ve PAdES kriptografik kontrolleri ile sertifika yolu doğrulamasını kapsar. Tam ETSI EN 319 102-1 AdES uygunluk raporu değildir.
 
 ## 10. Idempotency
 
@@ -573,9 +578,10 @@ Sonraki:
 
 - mevcut imza alanı yeniden kullanımı
 - multiple signatures
-- VRI sözlüğü.
-
-Uygulandı (Faz 8): RFC 3161 imza zaman damgası (T), DSS (sertifika/CRL/OCSP, LT), belge zaman damgası `/SubFilter /ETSI.RFC3161` (LTA). Profiller sessizce B'ye düşürülmez.
+- timestamp
+- LT/LTA
+- DSS/VRI validation data
+- archival timestamp.
 
 ## 15. XAdES
 
@@ -590,10 +596,13 @@ MVP:
 
 Sonraki:
 
+- T
+- LT
+- LTA
 - multiple signatures
-- signature policy.
-
-Uygulandı (Faz 8): T (`SignatureTimeStamp`), LT (`CertificateValues` / `RevocationValues`), LTA (`ArchiveTimeStamp`). Profiller sessizce B'ye düşürülmez.
+- signature policy
+- timestamps
+- OCSP/CRL evidence.
 
 ## 16. CAdES
 
@@ -606,19 +615,22 @@ MVP:
 
 Sonraki:
 
-- signature policy.
-
-Uygulandı (Faz 8): T (imza zaman damgası), LT (sertifika/iptal kanıtı), LTA (arşiv zaman damgası). Profiller sessizce B'ye düşürülmez.
+- T
+- LT
+- LTA
+- signature policy
+- validation data
+- archival timestamp.
 
 ## 17. ASiC
 
 ASiC-S:
 
-- one associated data/signature package (ZIP, uncompressed `mimetype` first, detached CAdES in `META-INF/signature.p7s`).
+- one associated data/signature package.
 
 ASiC-E:
 
-- multiple files and signatures (`ASiCManifest.xml` plus CAdES over the manifest).
+- multiple files and signatures.
 
 Container implementation:
 
@@ -626,8 +638,6 @@ Container implementation:
 - deterministic metadata rules
 - MIME metadata
 - signature relationship validation.
-
-T/LT/LTA inner CAdES üzerinde uygulanır.
 
 ## 18. Timestamp
 
@@ -647,8 +657,6 @@ RFC 3161:
 - message imprint
 - timestamp token
 - certificate validation.
-
-Worker varsayılanı: `Timestamping:Url` yapılandırılana kadar TSA yoktur. Testler, özel anahtarı dışa aktarmayan süreç-içi RFC 3161 TSA kullanabilir.
 
 Timestamp failures must never silently downgrade a requested T/LT/LTA signature to B.
 

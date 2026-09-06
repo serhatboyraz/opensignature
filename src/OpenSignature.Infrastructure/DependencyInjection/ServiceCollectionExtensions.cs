@@ -5,11 +5,14 @@ using OpenSignature.Application.Abstractions.Messaging;
 using OpenSignature.Application.Abstractions.Persistence;
 using OpenSignature.Application.Abstractions.Signatures;
 using OpenSignature.Application.Abstractions.Storage;
+using OpenSignature.Application.Abstractions.Verification;
 using OpenSignature.Application.Signatures;
 using OpenSignature.Infrastructure.Messaging;
 using OpenSignature.Infrastructure.Persistence;
 using OpenSignature.Infrastructure.Signatures;
 using OpenSignature.Infrastructure.Storage;
+using OpenSignature.Infrastructure.Verification;
+using OpenSignature.Validation;
 
 namespace OpenSignature.Infrastructure;
 
@@ -47,6 +50,18 @@ public static class ServiceCollectionExtensions
         ArgumentNullException.ThrowIfNull(services);
 
         services.AddScoped<ISignatureRequestService, EfSignatureRequestService>();
+        return services;
+    }
+
+    /// <summary>
+    /// Registers signature verification (Phase 9 validators + stored/uploaded report use case).
+    /// </summary>
+    public static IServiceCollection AddSignatureVerification(this IServiceCollection services)
+    {
+        ArgumentNullException.ThrowIfNull(services);
+
+        services.AddOpenSignatureValidation();
+        services.AddScoped<ISignatureVerificationService, SignatureVerificationService>();
         return services;
     }
 

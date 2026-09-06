@@ -6,6 +6,7 @@ const primaryNav = [
   { to: '/signatures', label: 'Signatures' },
   { to: '/certificates', label: 'Certificates' },
   { to: '/providers', label: 'Providers' },
+  { to: '/verify', label: 'Verify' },
 ]
 
 const secondaryNav = [
@@ -23,7 +24,7 @@ export function Layout() {
       <header className="app-header">
         <div className="brand-block">
           <p className="brand-mark">OpenSignature</p>
-          <p className="brand-tagline">Asynchronous digital signing for PAdES, XAdES, and CAdES.</p>
+          <p className="brand-tagline">Asynchronous digital signing for PAdES, XAdES, CAdES, and ASiC.</p>
         </div>
         <nav className="primary-nav" aria-label="Primary">
           {primaryNav.map((item) => (

@@ -3,6 +3,7 @@ using Microsoft.Extensions.DependencyInjection.Extensions;
 using OpenSignature.Application.Abstractions.Secrets;
 using OpenSignature.Application.Abstractions.Signing;
 using OpenSignature.Signing.Contracts;
+using OpenSignature.Signing.Formats.Asic;
 using OpenSignature.Signing.Formats.Cades;
 using OpenSignature.Signing.Formats.Pades;
 using OpenSignature.Signing.Formats.Xades;
@@ -117,8 +118,9 @@ public static class SigningServiceCollectionExtensions
     }
 
     /// <summary>
-    /// Registers the OpenSignature signature engine: PFX provider, CAdES/XAdES/PAdES Baseline B
-    /// format signers, and <see cref="ISignatureCreationService"/> (<see cref="SignatureOrchestrator"/>).
+    /// Registers the OpenSignature signature engine: PFX provider, format signers (including ASiC),
+    /// RFC 3161 timestamping (unavailable until configured), LT data provider, and
+    /// <see cref="ISignatureCreationService"/> (<see cref="SignatureOrchestrator"/>).
     /// </summary>
     public static IServiceCollection AddSignatureEngine(
         this IServiceCollection services,
@@ -129,12 +131,7 @@ public static class SigningServiceCollectionExtensions
         ArgumentNullException.ThrowIfNull(configurePfx);
 
         services.AddPfxSigningProvider(configurePfx, secrets);
-
-        services.TryAddSingleton<ICadesBaselineBSigner, CadesBaselineBSigner>();
-        services.TryAddSingleton<IXadesBaselineBSigner, XadesBaselineBSigner>();
-        services.TryAddSingleton<IPadesBaselineBSigner, PadesBaselineBSigner>();
-        services.TryAddSingleton<ISignatureCreationService, SignatureOrchestrator>();
-
+        services.AddSignatureFormatEngine();
         return services;
     }
 
@@ -150,8 +147,65 @@ public static class SigningServiceCollectionExtensions
         services.TryAddSingleton<ICadesBaselineBSigner, CadesBaselineBSigner>();
         services.TryAddSingleton<IXadesBaselineBSigner, XadesBaselineBSigner>();
         services.TryAddSingleton<IPadesBaselineBSigner, PadesBaselineBSigner>();
+        services.TryAddSingleton<IAsicSSigner, AsicSSigner>();
+        services.TryAddSingleton<IAsicESigner, AsicESigner>();
+        services.TryAddSingleton<Application.Abstractions.Timestamping.ITimestampAuthority>(
+            Timestamping.UnavailableTimestampAuthority.Instance);
+        services.TryAddSingleton<Profiles.ILongTermValidationDataProvider, Profiles.SigningCertificateOnlyValidationDataProvider>();
+        services.TryAddSingleton<Profiles.CadesProfileEnhancer>();
+        services.TryAddSingleton<Profiles.XadesProfileEnhancer>();
+        services.TryAddSingleton<Formats.Pades.PadesLongTermUpdater>();
         services.TryAddSingleton<ISignatureCreationService, SignatureOrchestrator>();
 
+        return services;
+    }
+
+    /// <summary>Replaces the timestamp authority with an HTTP RFC 3161 client.</summary>
+    public static IServiceCollection AddRfc3161TimestampAuthority(
+        this IServiceCollection services,
+        Action<Timestamping.Rfc3161TimestampAuthorityOptions> configure)
+    {
+        ArgumentNullException.ThrowIfNull(services);
+        ArgumentNullException.ThrowIfNull(configure);
+
+        var options = new Timestamping.Rfc3161TimestampAuthorityOptions();
+        configure(options);
+        services.RemoveAll<Application.Abstractions.Timestamping.ITimestampAuthority>();
+        services.AddSingleton(options);
+        services.AddSingleton<Application.Abstractions.Timestamping.ITimestampAuthority>(sp =>
+        {
+            var http = new HttpClient { Timeout = options.Timeout };
+            return new Timestamping.Rfc3161TimestampAuthority(http, options);
+        });
+        return services;
+    }
+
+    /// <summary>Replaces the timestamp authority with an in-process RFC 3161 TSA (tests / local development).</summary>
+    public static IServiceCollection AddLocalRfc3161TimestampAuthority(
+        this IServiceCollection services,
+        System.Security.Cryptography.X509Certificates.X509Certificate2 tsaCertificate,
+        string? policyOid = null)
+    {
+        ArgumentNullException.ThrowIfNull(services);
+        ArgumentNullException.ThrowIfNull(tsaCertificate);
+
+        services.RemoveAll<Application.Abstractions.Timestamping.ITimestampAuthority>();
+        services.AddSingleton<Application.Abstractions.Timestamping.ITimestampAuthority>(
+            new Timestamping.LocalRfc3161TimestampAuthority(tsaCertificate, policyOid));
+        return services;
+    }
+
+    /// <summary>Replaces the LT/LTA validation-data provider (certificates, CRLs, OCSP).</summary>
+    public static IServiceCollection AddLongTermValidationData(
+        this IServiceCollection services,
+        Profiles.LongTermValidationMaterial material)
+    {
+        ArgumentNullException.ThrowIfNull(services);
+        ArgumentNullException.ThrowIfNull(material);
+
+        services.RemoveAll<Profiles.ILongTermValidationDataProvider>();
+        services.AddSingleton<Profiles.ILongTermValidationDataProvider>(
+            new Profiles.StaticLongTermValidationDataProvider(material));
         return services;
     }
 }

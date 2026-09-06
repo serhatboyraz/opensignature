@@ -6,7 +6,9 @@ import {
   downloadSignatureContent,
   getSignature,
 } from '../api/signatures'
+import { verifyStoredSignature } from '../api/verification'
 import { StatusBadge } from '../components/StatusBadge'
+import { VerificationReportPanel } from '../components/VerificationReportPanel'
 import { formatDateTime, isTerminalStatus } from '../lib/format'
 import { apiUrl } from '../lib/config'
 
@@ -44,6 +46,13 @@ export function SignatureDetailPage() {
       anchor.remove()
       window.setTimeout(() => URL.revokeObjectURL(url), 60_000)
     },
+  })
+
+  const verificationQuery = useQuery({
+    queryKey: ['signature-verification', id],
+    queryFn: () => verifyStoredSignature(id),
+    enabled: Boolean(id) && statusQuery.data?.status === 'Completed',
+    retry: 1,
   })
 
   if (!id) {
@@ -200,6 +209,26 @@ export function SignatureDetailPage() {
                 ? `${downloadMutation.error.errorCode ?? 'ERROR'}: ${downloadMutation.error.message}`
                 : downloadMutation.error.message}
             </p>
+          ) : null}
+
+          {data.status === 'Completed' ? (
+            <section className="report-wrap">
+              {verificationQuery.isLoading ? (
+                <p className="muted">Verifying signed document…</p>
+              ) : null}
+              {verificationQuery.error ? (
+                <p className="error-text">
+                  {verificationQuery.error instanceof ApiError
+                    ? `${verificationQuery.error.errorCode ?? 'ERROR'}: ${verificationQuery.error.message}`
+                    : verificationQuery.error instanceof Error
+                      ? verificationQuery.error.message
+                      : 'Verification failed.'}
+                </p>
+              ) : null}
+              {verificationQuery.data ? (
+                <VerificationReportPanel report={verificationQuery.data} />
+              ) : null}
+            </section>
           ) : null}
         </>
       ) : null}

@@ -5,6 +5,7 @@ using System.Security.Cryptography.Xml;
 using System.Xml;
 using OpenSignature.Domain.Enums;
 using OpenSignature.Signing.Crypto;
+using OpenSignature.Signing.Formats.Asic;
 using OpenSignature.Signing.Formats.Pades;
 using OpenSignature.Signing.Formats.Xades;
 using OpenSignature.Validation.Certificates;
@@ -16,8 +17,8 @@ namespace OpenSignature.Validation.Signatures;
 /// and OpenSignature PAdES ByteRange helpers.
 /// </summary>
 /// <remarks>
-/// Limitations: not a full ETSI EN 319 102-1 validation report (no AdES attribute policy engine,
-/// no LTV evidence, no ASiC containers). Cryptographic verification + certificate pipeline only.
+/// Limitations: not a full ETSI EN 319 102-1 validation report (no AdES attribute policy engine).
+/// Cryptographic verification + certificate pipeline; ASiC containers are unpacked and the inner CAdES is verified.
 /// </remarks>
 public sealed class SignatureValidator : ISignatureValidator
 {
@@ -45,11 +46,15 @@ public sealed class SignatureValidator : ISignatureValidator
                 .ConfigureAwait(false),
             SignatureFormat.PAdES => await ValidatePadesAsync(request, checkedAt, cancellationToken)
                 .ConfigureAwait(false),
+            SignatureFormat.ASiC_S => await ValidateAsicSAsync(request, checkedAt, cancellationToken)
+                .ConfigureAwait(false),
+            SignatureFormat.ASiC_E => await ValidateAsicEAsync(request, checkedAt, cancellationToken)
+                .ConfigureAwait(false),
             _ => new SignatureValidationResult(
                 isValid: false,
                 request.Format,
                 [SignatureValidationCodes.SigFormatUnsupported],
-                detail: $"Format {request.Format} is not supported by the MVP signature validator (Baseline B CAdES/XAdES/PAdES only).",
+                detail: $"Format {request.Format} is not supported by the signature validator.",
                 checkedAt: checkedAt)
         };
     }
@@ -166,10 +171,8 @@ public sealed class SignatureValidator : ISignatureValidator
             PadesBaselineBSigner.ValidateSignedPdf(request.SignedBytes, verifySignatureOnly: true);
 
             var cms = PdfByteRangeHelper.ExtractCmsFromContents(request.SignedBytes);
-            var placeholder = PdfByteRangeHelper.FindContentsPlaceholder(
-                request.SignedBytes,
-                PadesBaselineBSigner.ContentsHexLength);
-            var data = ExtractByteRangeBytes(request.SignedBytes, placeholder.ByteRange);
+            var byteRange = PdfByteRangeHelper.ReadStoredByteRange(request.SignedBytes);
+            var data = ExtractByteRangeBytes(request.SignedBytes, byteRange);
             using var signerCert = ExtractCmsSignerCertificate(cms, data);
             if (signerCert is null)
             {
@@ -199,6 +202,94 @@ public sealed class SignatureValidator : ISignatureValidator
             return new SignatureValidationResult(
                 isValid: false,
                 SignatureFormat.PAdES,
+                [SignatureValidationCodes.SigParseFailed],
+                checkedAt: checkedAt,
+                detail: ex.Message);
+        }
+    }
+
+    private async Task<SignatureValidationResult> ValidateAsicSAsync(
+        SignatureValidationRequest request,
+        DateTimeOffset checkedAt,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            AsicSSigner.Validate(request.SignedBytes);
+            var (data, cms) = AsicSSigner.ExtractSignedPayload(request.SignedBytes);
+            using var signerCert = ExtractCmsSignerCertificate(cms, data);
+            if (signerCert is null)
+            {
+                return new SignatureValidationResult(
+                    isValid: false,
+                    SignatureFormat.ASiC_S,
+                    [SignatureValidationCodes.SigNoSigner],
+                    cryptoValid: true,
+                    checkedAt: checkedAt,
+                    detail: "ASiC-S CAdES verified but no signer certificate was present.");
+            }
+
+            return await FinalizeAsync(
+                SignatureFormat.ASiC_S,
+                request,
+                signerCert,
+                cryptoValid: true,
+                checkedAt,
+                cancellationToken).ConfigureAwait(false);
+        }
+        catch (CryptographicException ex)
+        {
+            return CryptoFailure(SignatureFormat.ASiC_S, request, checkedAt, ex);
+        }
+        catch (Exception ex) when (ex is InvalidOperationException or ArgumentException)
+        {
+            return new SignatureValidationResult(
+                isValid: false,
+                SignatureFormat.ASiC_S,
+                [SignatureValidationCodes.SigParseFailed],
+                checkedAt: checkedAt,
+                detail: ex.Message);
+        }
+    }
+
+    private async Task<SignatureValidationResult> ValidateAsicEAsync(
+        SignatureValidationRequest request,
+        DateTimeOffset checkedAt,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            AsicESigner.Validate(request.SignedBytes);
+            var (manifest, cms, _) = AsicESigner.ExtractSignedPayload(request.SignedBytes);
+            using var signerCert = ExtractCmsSignerCertificate(cms, manifest);
+            if (signerCert is null)
+            {
+                return new SignatureValidationResult(
+                    isValid: false,
+                    SignatureFormat.ASiC_E,
+                    [SignatureValidationCodes.SigNoSigner],
+                    cryptoValid: true,
+                    checkedAt: checkedAt,
+                    detail: "ASiC-E CAdES verified but no signer certificate was present.");
+            }
+
+            return await FinalizeAsync(
+                SignatureFormat.ASiC_E,
+                request,
+                signerCert,
+                cryptoValid: true,
+                checkedAt,
+                cancellationToken).ConfigureAwait(false);
+        }
+        catch (CryptographicException ex)
+        {
+            return CryptoFailure(SignatureFormat.ASiC_E, request, checkedAt, ex);
+        }
+        catch (Exception ex) when (ex is InvalidOperationException or ArgumentException)
+        {
+            return new SignatureValidationResult(
+                isValid: false,
+                SignatureFormat.ASiC_E,
                 [SignatureValidationCodes.SigParseFailed],
                 checkedAt: checkedAt,
                 detail: ex.Message);

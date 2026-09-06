@@ -1,6 +1,7 @@
 using System.Text;
 using OpenSignature.Signing.Contracts;
 using OpenSignature.Signing.Crypto;
+using OpenSignature.Signing.Formats.Asic;
 using OpenSignature.Signing.Formats.Cades;
 using OpenSignature.Signing.Formats.Pades;
 using OpenSignature.Signing.Formats.Xades;
@@ -54,6 +55,21 @@ public sealed class SignatureInteropTests
             .SignAsync(PadesBaselineBSigner.CreateMinimalPdf(), provider, selector);
 
         PadesBaselineBSigner.ValidateSignedPdf(signed.SignedPdf);
+    }
+
+    [Fact]
+    public async Task Asic_s_and_asic_e_interop_validation()
+    {
+        using var material = CreateMaterial("CN=Interop ASiC");
+        await using var provider = CreateProvider(material, "pfx-interop-asic");
+        var selector = await SelectorAsync(provider);
+        var content = Encoding.UTF8.GetBytes("interop-asic");
+
+        var asicS = await new AsicSSigner().SignAsync(content, provider, selector);
+        AsicSSigner.Validate(asicS.ContainerBytes);
+
+        var asicE = await new AsicESigner().SignAsync(content, provider, selector);
+        AsicESigner.Validate(asicE.ContainerBytes);
     }
 
     private static EphemeralPfx CreateMaterial(string subject) =>

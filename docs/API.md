@@ -1,6 +1,6 @@
 # OpenSignature REST API
 
-Contract for Phase 6 signing, certificate, and provider endpoints.
+Contract for Phase 6 signing, certificate, provider, and Phase 17 verification endpoints.
 
 Base path: `/api/v1`
 
@@ -54,9 +54,6 @@ Errors use RFC 7807 Problem Details. Machine-readable codes are in the `errorCod
 | `SIGNATURE_ALREADY_COMPLETED` | 409 | Operation conflicts with a completed signature |
 | `SIGNING_OPERATION_FAILED` | 500 / job failure | Unexpected signing or API failure |
 | `SIGNING_PROVIDER_UNSUPPORTED` | job failure | Provider type not implemented for the job |
-| `TIMESTAMP_AUTHORITY_UNAVAILABLE` | job failure | T/LT/LTA requested but no RFC 3161 TSA is configured |
-| `TIMESTAMP_OPERATION_FAILED` | job failure | TSA HTTP/token validation failed (retried, then DLQ) |
-| `SIGNATURE_VALIDATION_DATA_UNAVAILABLE` | job failure | LT/LTA requested but CRL/OCSP evidence is missing |
 
 Clients should treat `errorCode` as stable for branching; `detail` is human-readable and may change.
 
@@ -206,6 +203,89 @@ Requests cancellation. Reliable only before signing has progressed past a cancel
 
 ---
 
+### GET /api/v1/signatures/{id}/verification
+
+Verifies the stored signed output of a completed signature request. Does not perform signing. Returns a detailed report: overall status (`VALID` / `INVALID` / `INDETERMINATE`), cryptographic check, certificate path, revocation, and machine-readable reason codes.
+
+MVP coverage: Baseline B CAdES (attached), XAdES, and PAdES. Not a full ETSI EN 319 102-1 AdES conformance report.
+
+#### Headers
+
+- `X-Tenant-Id` (recommended)
+- `Authorization` (when authentication is enabled; `SignaturesRead`)
+
+#### Responses
+
+| Status | Meaning |
+|--------|---------|
+| `200 OK` | Detailed verification report |
+| `400 Bad Request` | Invalid tenant |
+| `404 Not Found` | Unknown signature (`SIGNATURE_INPUT_NOT_FOUND`) |
+| `409 Conflict` | Not completed / output missing (`SIGNATURE_OUTPUT_NOT_FOUND`) |
+
+Example `200` body:
+
+```json
+{
+  "overallStatus": "VALID",
+  "isValid": true,
+  "reasonCodes": ["SIG_VALID", "CERT_VALID"],
+  "checkedAt": "2026-09-06T08:00:00Z",
+  "source": "StoredSignature",
+  "format": "CAdES",
+  "signatureId": "0198...",
+  "detail": null,
+  "limitations": "MVP Baseline B cryptographic verification and certificate path checks. Not a full ETSI EN 319 102-1 AdES conformance report (no T/LT/LTA evidence or ASiC).",
+  "signature": {
+    "cryptoValid": true,
+    "signerThumbprint": "...",
+    "signerSubject": "CN=...",
+    "reasonCodes": ["SIG_VALID"]
+  },
+  "certificate": {
+    "isValid": true,
+    "subject": "CN=...",
+    "issuer": "CN=...",
+    "thumbprint": "...",
+    "notBefore": "2026-01-01T00:00:00Z",
+    "notAfter": "2027-01-01T00:00:00Z",
+    "reasonCodes": ["CERT_VALID"],
+    "chainStatus": [],
+    "revocation": {
+      "status": "Unknown",
+      "source": "Offline",
+      "detail": null
+    }
+  }
+}
+```
+
+---
+
+## Ad-hoc verification
+
+### POST /api/v1/verifications
+
+Verifies an uploaded signed document in memory. The file is not persisted and is never placed on RabbitMQ.
+
+#### Multipart fields
+
+| Field | Required | Values / notes |
+|-------|----------|----------------|
+| `file` | Yes | Signed artifact (CMS, signed XML, or signed PDF). Subject to `Signatures:MaxUploadBytes`. |
+| `format` | Yes | `PAdES`, `XAdES`, `CAdES` |
+| `originalFile` | No | Original document for detached CAdES |
+
+#### Responses
+
+| Status | Meaning |
+|--------|---------|
+| `200 OK` | Detailed verification report (`source`: `UploadedDocument`) |
+| `400 Bad Request` | Missing file/format (`SIGNATURE_REQUEST_INVALID` / `SIGNATURE_FORMAT_UNSUPPORTED`) |
+| `413 Payload Too Large` | Upload exceeds configured max size |
+
+---
+
 ## Certificates
 
 Public certificate metadata only. Endpoints never export private keys, PFX material, or hardware secrets.
@@ -307,5 +387,5 @@ The generated document includes signature routes under `/api/v1/signatures` (inc
 ## Notes
 
 - Document binaries are never placed in RabbitMQ messages; only job/metadata references are queued.
-- Do not silently downgrade a requested signature profile. T/LT/LTA require worker `Timestamping:Url`; LT/LTA also need CRL or OCSP evidence (`TIMESTAMP_AUTHORITY_UNAVAILABLE` / `SIGNATURE_VALIDATION_DATA_UNAVAILABLE`).
-- Verification covers CAdES, XAdES, PAdES, and ASiC (inner CAdES). Reports are cryptographic + certificate-path checks, not full ETSI EN 319 102-1 AdES conformance.
+- Do not silently downgrade a requested signature profile.
+- Verification reports cover Baseline B crypto + certificate path checks; they are not full ETSI EN 319 102-1 AdES conformance reports.

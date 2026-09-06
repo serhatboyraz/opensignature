@@ -451,10 +451,8 @@
 
 ## Phase 8 — ASiC and Advanced Profiles
 
-> **Skipped for now** (per product roadmap prioritization). Revisit after Phases 7/9–11/13.
-
 ### T080 — ASiC-S
-- Status: `SKIPPED`
+- Status: `IN_PROGRESS`
 - Priority: P1
 - Depends on: T051, T052
 - Commit:
@@ -662,6 +660,68 @@
 - Depends on: T061, T062
 - Commit:
   - `feat(web): add provider and certificate views`
+
+---
+
+## Phase 17 — Signature Verification
+
+> Exposes the Phase 9 validation engine (`OpenSignature.Validation`) through REST APIs and the React UI. Cryptographic verification covers Baseline B CAdES/XAdES/PAdES; results are shown in detail (overall status, crypto check, certificate path, revocation, reason codes). Not a full ETSI EN 319 102-1 AdES conformance report.
+
+### T160 — Verification Application Service
+- Status: `DONE`
+- Priority: P0
+- Depends on: T021, T091, T092
+- Scope:
+  - Application port `ISignatureVerificationService`.
+  - Verify a completed platform signature from stored signed bytes (and original content for detached CAdES when supplied).
+  - Verify an uploaded signed document (ad-hoc) without persisting binaries.
+  - Structured report DTO: overall status, crypto, certificate path, revocation, reason codes.
+- Acceptance:
+  - Completed signatures can be verified without signing again.
+  - Incomplete signatures are rejected (not found / output not ready).
+  - Uploaded files are size-limited and never written to RabbitMQ.
+  - Private keys are never loaded or returned.
+- Tests:
+  - valid attached CAdES stored signature
+  - modified signed bytes fail
+  - queued signature is not verifiable
+  - ad-hoc upload of a valid signature
+- Commit:
+  - `feat(validation): add signature verification application service`
+
+### T161 — Verification API
+- Status: `DONE`
+- Priority: P0
+- Depends on: T160, T060
+- Scope:
+  - `GET /api/v1/signatures/{id}/verification`
+  - `POST /api/v1/verifications`
+  - RFC 7807 Problem Details
+  - `SignaturesRead` authorization
+- Acceptance:
+  - API never performs signing.
+  - Detailed JSON report is returned for completed signatures.
+  - Ad-hoc verification accepts `file`, `format`, and optional `originalFile` (detached CAdES).
+- Tests:
+  - API integration for stored and uploaded verification
+  - 404 / 409 paths
+  - OpenAPI includes verification routes
+- Commit:
+  - `feat(api): add signature verification endpoints`
+
+### T162 — Verification UI
+- Status: `DONE`
+- Priority: P0
+- Depends on: T161, T132
+- Scope:
+  - Signature detail page shows a detailed verification report for completed signatures.
+  - Dedicated Verify page for uploaded signed documents.
+  - Display overall status, reason codes, cryptographic check, certificate path, and revocation.
+- Acceptance:
+  - A completed signature shows VALID / INVALID / INDETERMINATE with supporting detail.
+  - Users can upload a signed file and see the same detailed report.
+- Commit:
+  - `feat(web): show detailed signature verification results`
 
 ---
 

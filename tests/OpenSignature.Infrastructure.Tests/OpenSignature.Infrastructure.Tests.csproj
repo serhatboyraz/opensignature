@@ -23,6 +23,8 @@
 
   <ItemGroup>
     <ProjectReference Include="..\..\src\OpenSignature.Infrastructure\OpenSignature.Infrastructure.csproj" />
+    <ProjectReference Include="..\..\src\OpenSignature.Signing\OpenSignature.Signing.csproj" />
+    <ProjectReference Include="..\..\src\OpenSignature.Validation\OpenSignature.Validation.csproj" />
   </ItemGroup>
 
 </Project>

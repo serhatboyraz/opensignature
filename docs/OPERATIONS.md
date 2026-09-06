@@ -74,3 +74,20 @@ Workers acquire an idempotent processing lock before signing (`ISigningJobLockSe
 - Duplicate RabbitMQ deliveries or concurrent workers that lose the lock race ACK without signing again.
 - After a worker crash/restart, `Locked` or `Processing` jobs whose `LockedUntil` is in the past (or unset) may be reclaimed; non-expired locks are not stolen.
 - Default lock lease is 15 minutes (must exceed expected signing duration).
+
+## Timestamping (RFC 3161)
+
+T/LT/LTA profiles need a timestamp authority. The worker defaults to an unavailable TSA so those profiles fail closed (`TIMESTAMP_AUTHORITY_UNAVAILABLE`) instead of signing as Baseline B.
+
+Set `Timestamping:Url` on the worker to enable the HTTP RFC 3161 client:
+
+```json
+"Timestamping": {
+  "Url": "https://tsa.example.invalid/",
+  "PolicyOid": ""
+}
+```
+
+HTTP TSA failures are classified as retryable (`TIMESTAMP_OPERATION_FAILED`) until the bounded retry budget is exhausted.
+
+LT/LTA also require CRL or OCSP evidence registered via `AddLongTermValidationData`. The default provider only includes the signing certificate, so LT/LTA fail with `SIGNATURE_VALIDATION_DATA_UNAVAILABLE` until revocation material is supplied. OpenSignature does not fabricate timestamps or revocation data.

@@ -22,7 +22,7 @@ builder.Services.AddOpenApi(options =>
         document.Info.Title = "OpenSignature API";
         document.Info.Version = "v1";
         document.Info.Description =
-            "REST API for asynchronous digital signatures (PAdES, XAdES, CAdES, ASiC). " +
+            "REST API for asynchronous digital signatures (PAdES, XAdES, CAdES, ASiC) and signature verification. " +
             "Private keys are never exported.";
         return Task.CompletedTask;
     });
@@ -37,6 +37,7 @@ builder.Services.AddPersistence(connectionString);
 builder.Services.Configure<SignatureApiOptions>(
     builder.Configuration.GetSection(SignatureApiOptions.SectionName));
 builder.Services.AddSignatureRequestService();
+builder.Services.AddSignatureVerification();
 builder.Services.AddSecretStores(builder.Configuration);
 builder.Services.AddOpenSignatureSecurity(builder.Configuration);
 
@@ -108,6 +109,7 @@ app.MapGet("/", () => Results.Ok(new
     status = "running"
 })).AllowAnonymous();
 app.MapSignatureEndpoints(authEnabled);
+app.MapVerificationEndpoints(authEnabled);
 app.MapCertificateEndpoints(authEnabled);
 app.MapProviderEndpoints(authEnabled);
 

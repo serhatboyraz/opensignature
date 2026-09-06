@@ -1,6 +1,7 @@
 using System.Text;
 using OpenSignature.Domain.Enums;
 using OpenSignature.Signing.Contracts;
+using OpenSignature.Signing.Formats.Asic;
 using OpenSignature.Signing.Formats.Cades;
 using OpenSignature.Signing.Formats.Pades;
 using OpenSignature.Signing.Formats.Xades;
@@ -158,10 +159,31 @@ public sealed class SignatureValidatorTests
     }
 
     [Fact]
-    public async Task Unsupported_format_returns_SIG_FORMAT_UNSUPPORTED()
+    public async Task Asic_s_validates_and_tampered_container_fails()
+    {
+        using var material = EphemeralPfx.CreateRsa("CN=ASiC-S Val", Password);
+        await using var provider = CreateProvider(material, "pfx-asic-s-val");
+        var selector = await SelectorAsync(provider);
+        var content = Encoding.UTF8.GetBytes("asic-s-validate");
+
+        var signed = await new AsicSSigner().SignAsync(content, provider, selector);
+        var result = await new SignatureValidator().ValidateAsync(
+            new SignatureValidationRequest(SignatureFormat.ASiC_S, signed.ContainerBytes));
+
+        Assert.True(result.IsValid);
+        Assert.True(result.CryptoValid);
+
+        signed.ContainerBytes[40] ^= 0xFF;
+        var tampered = await new SignatureValidator().ValidateAsync(
+            new SignatureValidationRequest(SignatureFormat.ASiC_S, signed.ContainerBytes));
+        Assert.False(tampered.IsValid);
+    }
+
+    [Fact]
+    public async Task Unknown_enum_format_returns_SIG_FORMAT_UNSUPPORTED()
     {
         var result = await new SignatureValidator().ValidateAsync(
-            new SignatureValidationRequest(SignatureFormat.ASiC_S, [0x01]));
+            new SignatureValidationRequest((SignatureFormat)999, [0x01]));
 
         Assert.False(result.IsValid);
         Assert.Contains(SignatureValidationCodes.SigFormatUnsupported, result.ReasonCodes);
