@@ -39,12 +39,92 @@ internal static class Pkcs11ProviderHelpers
             return match;
         }
 
-        if (slots.Count > 1)
+        if (slots.Count > 1 && !options.PreferFirstSlotWhenAmbiguous)
         {
             throw new InvalidOperationException(
-                "Multiple PKCS#11 tokens are present; configure SlotId or TokenLabel.");
+                "Multiple PKCS#11 tokens are present; configure SlotId or TokenLabel, " +
+                "or set PreferFirstSlotWhenAmbiguous for development.");
         }
 
+        return slots[0];
+    }
+
+    /// <summary>
+    /// Resolves a slot that can list at least one certificate after login.
+    /// Used when virtual readers report multiple token-present slots (eToken / Aladdin).
+    /// </summary>
+    public static IPkcs11Slot ResolveSlotWithCertificates(
+        IPkcs11Library library,
+        Pkcs11ProviderOptionsBase options,
+        ISigningSecretProvider? secretProvider,
+        Pkcs11ObjectFilter? certificateFilter,
+        ref ulong? cachedSlotId)
+    {
+        ArgumentNullException.ThrowIfNull(library);
+        ArgumentNullException.ThrowIfNull(options);
+
+        if (cachedSlotId is { } remembered)
+        {
+            return library.GetSlot(remembered);
+        }
+
+        if (options.SlotId is not null || !string.IsNullOrWhiteSpace(options.TokenLabel))
+        {
+            var configured = ResolveSlot(library, options);
+            cachedSlotId = configured.SlotId;
+            return configured;
+        }
+
+        var slots = library.GetSlots(tokenPresentOnly: true);
+        if (slots.Count == 0)
+        {
+            throw new InvalidOperationException(
+                $"PKCS#11 module '{options.ModulePath}' has no slots with a token present.");
+        }
+
+        if (slots.Count == 1)
+        {
+            cachedSlotId = slots[0].SlotId;
+            return slots[0];
+        }
+
+        if (!options.PreferFirstSlotWhenAmbiguous)
+        {
+            throw new InvalidOperationException(
+                "Multiple PKCS#11 tokens are present; configure SlotId or TokenLabel, " +
+                "or set PreferFirstSlotWhenAmbiguous for development.");
+        }
+
+        var pin = ResolvePin(options, secretProvider);
+        foreach (var slot in slots)
+        {
+            try
+            {
+                using var session = slot.OpenSession(readWrite: false);
+                session.Login(pin);
+                try
+                {
+                    if (session.FindCertificates(certificateFilter).Count > 0)
+                    {
+                        cachedSlotId = slot.SlotId;
+                        return slot;
+                    }
+                }
+                finally
+                {
+                    if (session.IsLoggedIn)
+                    {
+                        session.Logout();
+                    }
+                }
+            }
+            catch (InvalidOperationException)
+            {
+                // Empty virtual readers / login failures — try the next slot.
+            }
+        }
+
+        cachedSlotId = slots[0].SlotId;
         return slots[0];
     }
 

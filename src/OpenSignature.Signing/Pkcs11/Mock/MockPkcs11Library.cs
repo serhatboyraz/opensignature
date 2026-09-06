@@ -100,6 +100,38 @@ public sealed class MockPkcs11Library : IPkcs11Library
         return new MockPkcs11Library(modulePath, [slot], isAvailable: true, unavailableDetail: null);
     }
 
+    /// <summary>
+    /// Creates a library with an empty virtual reader and a second slot that holds the signing certificate.
+    /// Used to exercise PreferFirstSlotWhenAmbiguous probing.
+    /// </summary>
+    public static MockPkcs11Library CreateWithEmptySlotThenRsa(
+        string modulePath = "mock-pkcs11",
+        string expectedPin = "1234",
+        string subject = "CN=OpenSignature Mock PKCS11 RSA",
+        DateTimeOffset? notBefore = null,
+        DateTimeOffset? notAfter = null)
+    {
+        var empty = new MockPkcs11Slot(0, "Virtual empty", "Empty", tokenPresent: true, []);
+
+        var rsa = RSA.Create(2048);
+        var request = new CertificateRequest(subject, rsa, HashAlgorithmName.SHA256, RSASignaturePadding.Pkcs1);
+        request.CertificateExtensions.Add(
+            new X509KeyUsageExtension(X509KeyUsageFlags.DigitalSignature | X509KeyUsageFlags.NonRepudiation, critical: true));
+        var notBeforeValue = notBefore ?? DateTimeOffset.UtcNow.AddDays(-1);
+        var notAfterValue = notAfter ?? DateTimeOffset.UtcNow.AddYears(1);
+        using var certificate = request.CreateSelfSigned(notBeforeValue, notAfterValue);
+        var der = certificate.Export(X509ContentType.Cert);
+        var entry = new MockTokenEntry(
+            label: "sign-key",
+            id: [0x01],
+            certificateDer: der,
+            rsa: rsa,
+            ecdsa: null,
+            expectedPin: expectedPin);
+        var real = new MockPkcs11Slot(1, "Real token", "RealToken", tokenPresent: true, [entry]);
+        return new MockPkcs11Library(modulePath, [empty, real], isAvailable: true, unavailableDetail: null);
+    }
+
     public IReadOnlyList<IPkcs11Slot> GetSlots(bool tokenPresentOnly = true)
     {
         ThrowIfDisposed();

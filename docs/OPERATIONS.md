@@ -171,8 +171,13 @@ By default, certificates outside `NotBefore`/`NotAfter` cannot sign (`CanSign=fa
 
 ```json
 "Signing": {
-  "AllowExpiredCertificates": true
+  "AllowExpiredCertificates": true,
+  "SmartCard": {
+    "ModulePath": "C:\\Windows\\System32\\eTPKCS11.dll",
+    "PreferFirstSlotWhenAmbiguous": true,
+    "PinSecretName": "Signing:SmartCard:Pin"
+  }
 }
 ```
 
-Development `appsettings.Development.json` sets this to `true`. Leave it `false` in production. Signature verification still reports that the certificate is expired; this flag only allows creating a signature with an expired key.
+Development `appsettings.Development.json` sets `AllowExpiredCertificates` and `PreferFirstSlotWhenAmbiguous` to `true`, and pins SafeNet `eTPKCS11.dll` when that middleware is installed. `PreferFirstSlotWhenAmbiguous` probes token-present slots until one exposes certificates (eToken/Aladdin often registers several virtual readers). Leave both flags `false` in production. Signature verification still reports that the certificate is expired; these flags only allow creating a signature for local testing.

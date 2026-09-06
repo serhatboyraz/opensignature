@@ -20,6 +20,7 @@ public sealed class SmartCardSigningProvider : ISigningProvider
     private readonly SigningOptions _signingOptions;
     private readonly object _gate = new();
     private IPkcs11Library? _library;
+    private ulong? _resolvedSlotId;
     private string? _initFailureDetail;
     private bool _disposed;
 
@@ -81,9 +82,9 @@ public sealed class SmartCardSigningProvider : ISigningProvider
         ThrowIfDisposed();
         cancellationToken.ThrowIfCancellationRequested();
 
-        return Task.FromResult(WithSession(session =>
+        return Task.FromResult(WithSession((session, slot) =>
         {
-            var certificates = EnumerateCertificates(session);
+            var certificates = EnumerateCertificates(session, slot);
             return (IReadOnlyList<CertificateInfo>)certificates;
         }));
     }
@@ -96,9 +97,9 @@ public sealed class SmartCardSigningProvider : ISigningProvider
         ArgumentNullException.ThrowIfNull(selector);
         cancellationToken.ThrowIfCancellationRequested();
 
-        return Task.FromResult(WithSession(session =>
+        return Task.FromResult(WithSession((session, slot) =>
         {
-            var match = EnumerateCertificates(session)
+            var match = EnumerateCertificates(session, slot)
                 .FirstOrDefault(c => Pkcs11CertificateMapper.Matches(c, selector));
             return match;
         }));
@@ -122,9 +123,9 @@ public sealed class SmartCardSigningProvider : ISigningProvider
                 nameof(digest));
         }
 
-        return Task.FromResult(WithSession(session =>
+        return Task.FromResult(WithSession((session, slot) =>
         {
-            var mapped = MapCertificatePairs(FindCertificateObjects(session));
+            var mapped = MapCertificatePairs(FindCertificateObjects(session), slot);
             var match = mapped.FirstOrDefault(pair => Pkcs11CertificateMapper.Matches(pair.Info, certificateSelector));
             if (match.Object is null)
             {
@@ -162,7 +163,24 @@ public sealed class SmartCardSigningProvider : ISigningProvider
             IPkcs11Slot slot;
             try
             {
-                slot = Pkcs11ProviderHelpers.ResolveSlot(library, _options);
+                if (_options.PreferFirstSlotWhenAmbiguous
+                    && _options.SlotId is null
+                    && string.IsNullOrWhiteSpace(_options.TokenLabel))
+                {
+                    // Health must not log in — use first token-present slot only.
+                    var slots = library.GetSlots(tokenPresentOnly: true);
+                    if (slots.Count == 0)
+                    {
+                        throw new InvalidOperationException(
+                            $"PKCS#11 module '{_options.ModulePath}' has no slots with a token present.");
+                    }
+
+                    slot = slots[0];
+                }
+                else
+                {
+                    slot = Pkcs11ProviderHelpers.ResolveSlot(library, _options);
+                }
             }
             catch (InvalidOperationException ex)
             {
@@ -215,13 +233,24 @@ public sealed class SmartCardSigningProvider : ISigningProvider
         {
             _library?.Dispose();
             _library = null;
+            _resolvedSlotId = null;
         }
 
         return ValueTask.CompletedTask;
     }
 
-    private List<CertificateInfo> EnumerateCertificates(IPkcs11Session session) =>
-        MapCertificatePairs(FindCertificateObjects(session)).Select(static pair => pair.Info).ToList();
+    private IReadOnlyList<(Pkcs11CertificateObject Object, CertificateInfo Info)> MapCertificatePairs(
+        IReadOnlyList<Pkcs11CertificateObject> objects,
+        IPkcs11Slot slot) =>
+        Pkcs11CertificateMapper.MapAll(
+            objects,
+            slot.SlotId,
+            ProviderScheme,
+            DateTimeOffset.UtcNow,
+            _signingOptions.AllowExpiredCertificates);
+
+    private List<CertificateInfo> EnumerateCertificates(IPkcs11Session session, IPkcs11Slot slot) =>
+        MapCertificatePairs(FindCertificateObjects(session), slot).Select(static pair => pair.Info).ToList();
 
     private IReadOnlyList<Pkcs11CertificateObject> FindCertificateObjects(IPkcs11Session session)
     {
@@ -229,30 +258,23 @@ public sealed class SmartCardSigningProvider : ISigningProvider
         return session.FindCertificates(filter);
     }
 
-    private IReadOnlyList<(Pkcs11CertificateObject Object, CertificateInfo Info)> MapCertificatePairs(
-        IReadOnlyList<Pkcs11CertificateObject> objects)
+    private T WithSession<T>(Func<IPkcs11Session, IPkcs11Slot, T> action)
     {
         var library = EnsureLibrary();
-        var slot = Pkcs11ProviderHelpers.ResolveSlot(library, _options);
-        return Pkcs11CertificateMapper.MapAll(
-            objects,
-            slot.SlotId,
-            ProviderScheme,
-            DateTimeOffset.UtcNow,
-            _signingOptions.AllowExpiredCertificates);
-    }
-
-    private T WithSession<T>(Func<IPkcs11Session, T> action)
-    {
-        var library = EnsureLibrary();
-        var slot = Pkcs11ProviderHelpers.ResolveSlot(library, _options);
+        var filter = Pkcs11CertificateMapper.CreateConfiguredFilter(_options);
+        var slot = Pkcs11ProviderHelpers.ResolveSlotWithCertificates(
+            library,
+            _options,
+            _secretProvider,
+            filter,
+            ref _resolvedSlotId);
         var pin = Pkcs11ProviderHelpers.ResolvePin(_options, _secretProvider);
 
         using var session = slot.OpenSession(readWrite: false);
         try
         {
             session.Login(pin);
-            return action(session);
+            return action(session, slot);
         }
         finally
         {

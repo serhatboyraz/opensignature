@@ -148,6 +148,7 @@ public static class SigningServiceCollectionExtensions
         target.PinSecretName = source.PinSecretName;
         target.CertificateLabel = source.CertificateLabel;
         target.CertificateIdHex = source.CertificateIdHex;
+        target.PreferFirstSlotWhenAmbiguous = source.PreferFirstSlotWhenAmbiguous;
     }
 
     private static void RegisterSigningSecrets(

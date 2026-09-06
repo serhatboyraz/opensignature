@@ -1,5 +1,5 @@
 import { useMutation, useQueries, useQuery, useQueryClient } from '@tanstack/react-query'
-import { useEffect, useMemo, useState, type FormEvent } from 'react'
+import { useEffect, useState, type FormEvent } from 'react'
 import { Link } from 'react-router-dom'
 import { listCertificates, listProviders } from '../api/providers'
 import { createSignature, getSignature } from '../api/signatures'
@@ -57,11 +57,7 @@ export function SignatureDashboardPage({ title, intro }: SignatureDashboardPageP
   const providers = providersQuery.data ?? []
   const certificates = certificatesQuery.data ?? []
   const selectedProvider = providers.find((provider) => provider.id === selectedProviderId) ?? null
-  const providerCertificates = useMemo(
-    () => certificates.filter((certificate) => certificate.providerId === selectedProviderId),
-    [certificates, selectedProviderId],
-  )
-  const selectedCertificate = providerCertificates.find(
+  const selectedCertificate = certificates.find(
     (certificate) => certificateOptionKey(certificate.providerId, certificate.thumbprint) === selectedCertKey,
   )
 
@@ -75,17 +71,23 @@ export function SignatureDashboardPage({ title, intro }: SignatureDashboardPageP
   }, [providers, selectedProviderId])
 
   useEffect(() => {
-    if (selectedCertKey !== null || !selectedProviderId || !certificatesQuery.isSuccess) {
+    if (selectedCertKey !== null || !certificatesQuery.isSuccess) {
       return
     }
 
-    const firstSignable = providerCertificates.find((certificate) => certificate.canSign)
+    const preferred =
+      certificates.find(
+        (certificate) => certificate.canSign && certificate.providerId === selectedProviderId,
+      ) ??
+      certificates.find((certificate) => certificate.canSign) ??
+      certificates[0]
+
     setSelectedCertKey(
-      firstSignable
-        ? certificateOptionKey(firstSignable.providerId, firstSignable.thumbprint)
+      preferred
+        ? certificateOptionKey(preferred.providerId, preferred.thumbprint)
         : CERT_DEFAULT,
     )
-  }, [certificatesQuery.isSuccess, providerCertificates, selectedCertKey, selectedProviderId])
+  }, [certificates, certificatesQuery.isSuccess, selectedCertKey, selectedProviderId])
 
   const statusQueries = useQueries({
     queries: trackedIds.map((id) => ({
@@ -121,8 +123,28 @@ export function SignatureDashboardPage({ title, intro }: SignatureDashboardPageP
 
   function onProviderChange(providerId: string) {
     setSelectedProviderId(providerId)
-    setSelectedCertKey(null)
     setFormError(null)
+    const match =
+      certificates.find((certificate) => certificate.canSign && certificate.providerId === providerId) ??
+      certificates.find((certificate) => certificate.providerId === providerId)
+    setSelectedCertKey(
+      match ? certificateOptionKey(match.providerId, match.thumbprint) : CERT_DEFAULT,
+    )
+  }
+
+  function onCertificateChange(value: string) {
+    setSelectedCertKey(value || CERT_DEFAULT)
+    setFormError(null)
+    if (!value || value === CERT_DEFAULT) {
+      return
+    }
+
+    const match = certificates.find(
+      (certificate) => certificateOptionKey(certificate.providerId, certificate.thumbprint) === value,
+    )
+    if (match) {
+      setSelectedProviderId(match.providerId)
+    }
   }
 
   function onSubmit(event: FormEvent<HTMLFormElement>) {
@@ -140,7 +162,7 @@ export function SignatureDashboardPage({ title, intro }: SignatureDashboardPageP
 
     if (selectedCertificate && !selectedCertificate.canSign) {
       setFormError(
-        'The selected certificate cannot sign. Choose a certificate with Can sign = Yes, or check the token PIN and validity.',
+        'The selected certificate cannot sign (no matching private key on the token, or expiration is blocked). For expired USB certs in Development, ensure Signing:AllowExpiredCertificates=true on API and Worker.',
       )
       return
     }
@@ -192,6 +214,9 @@ export function SignatureDashboardPage({ title, intro }: SignatureDashboardPageP
 
   const isHardwareProvider =
     selectedProvider?.providerType === 'SmartCard' || selectedProvider?.providerType === 'Pkcs11'
+
+  const usbCertificateCount = certificates.filter((certificate) => certificate.providerId === 'usb-token')
+    .length
 
   return (
     <section className="page">
@@ -264,15 +289,14 @@ export function SignatureDashboardPage({ title, intro }: SignatureDashboardPageP
             <span>Certificate</span>
             <select
               value={selectedCertKey ?? ''}
-              onChange={(e) => setSelectedCertKey(e.target.value || CERT_DEFAULT)}
-              disabled={!selectedProviderId || certificatesQuery.isLoading}
+              onChange={(e) => onCertificateChange(e.target.value)}
+              disabled={certificatesQuery.isLoading || certificates.length === 0}
             >
               <option value={CERT_DEFAULT}>Use provider default (first signable certificate)</option>
-              {providerCertificates.map((certificate) => (
+              {certificates.map((certificate) => (
                 <option
                   key={certificateOptionKey(certificate.providerId, certificate.thumbprint)}
                   value={certificateOptionKey(certificate.providerId, certificate.thumbprint)}
-                  disabled={!certificate.canSign}
                 >
                   {certificateLabel(certificate)}
                 </option>
@@ -281,20 +305,18 @@ export function SignatureDashboardPage({ title, intro }: SignatureDashboardPageP
           </label>
           {certificatesQuery.isLoading ? <p className="muted">Loading certificates…</p> : null}
           {certificatesError ? <p className="error-text">{certificatesError}</p> : null}
-          {certificatesQuery.isSuccess && selectedProviderId && providerCertificates.length === 0 ? (
+          {certificatesQuery.isSuccess && certificates.length === 0 ? (
             <p className="empty">
-              No certificates were returned for this provider.{' '}
-              {isHardwareProvider ? (
-                <>
-                  Confirm the USB token is plugged in, PKCS#11 middleware is installed, and the PIN
-                  is set in user secrets (listing logs in). See{' '}
-                  <Link to="/providers">Providers</Link>.
-                </>
-              ) : (
-                <>
-                  Check the <Link to="/certificates">Certificates</Link> page.
-                </>
-              )}
+              No certificates were returned by any provider. Check the{' '}
+              <Link to="/certificates">Certificates</Link> and <Link to="/providers">Providers</Link>{' '}
+              pages.
+            </p>
+          ) : null}
+          {certificatesQuery.isSuccess && certificates.length > 0 ? (
+            <p className="note">
+              Showing {certificates.length} certificate(s)
+              {usbCertificateCount > 0 ? ` (${usbCertificateCount} from USB token)` : ''}. Choosing a
+              certificate also selects its provider.
             </p>
           ) : null}
           {selectedCertificate ? (
@@ -302,6 +324,13 @@ export function SignatureDashboardPage({ title, intro }: SignatureDashboardPageP
               <div>
                 <dt>Subject</dt>
                 <dd>{selectedCertificate.subject}</dd>
+              </div>
+              <div>
+                <dt>Provider</dt>
+                <dd>
+                  {selectedCertificate.providerId}
+                  {isHardwareProvider ? ' (USB / smart card)' : ''}
+                </dd>
               </div>
               <div>
                 <dt>Thumbprint</dt>
@@ -321,9 +350,8 @@ export function SignatureDashboardPage({ title, intro }: SignatureDashboardPageP
             </dl>
           ) : (
             <p className="note">
-              Choose a certificate from the selected provider. USB tokens appear under SmartCard.
-              The worker uses this thumbprint, so a PFX certificate cannot be used with a USB
-              provider.
+              Choose a certificate. USB-token certificates are listed together with the development
+              PFX certificate; the matching provider is applied automatically.
             </p>
           )}
           {format === 'PAdES' ? (
@@ -438,8 +466,14 @@ function resolveProviderType(provider: ProviderListItem | null): SigningProvider
 }
 
 function certificateLabel(certificate: CertificateListItem): string {
-  const name = certificate.friendlyName?.trim() || certificate.subject
+  const name = shortSubject(certificate.subject)
   const signable = certificate.canSign ? 'can sign' : 'cannot sign'
-  const validity = certificate.isCurrentlyValid ? 'valid' : 'not valid'
-  return `${name} — ${signable}, ${validity}`
+  const validity = certificate.isCurrentlyValid ? 'valid' : 'expired'
+  return `[${certificate.providerId}] ${name} — ${signable}, ${validity}`
+}
+
+function shortSubject(subject: string): string {
+  const cn = /CN=([^,]+)/i.exec(subject)
+  const value = cn?.[1]?.trim().replace(/^"|"$/g, '')
+  return value || subject
 }

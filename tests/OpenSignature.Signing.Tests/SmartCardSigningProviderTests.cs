@@ -169,6 +169,57 @@ public sealed class SmartCardSigningProviderTests
         Assert.True(VerifyRsa(certificates[0], digest, signature));
     }
 
+    [Fact]
+    public async Task PreferFirstSlotWhenAmbiguous_finds_certificate_on_second_slot()
+    {
+        using var library = MockPkcs11Library.CreateWithEmptySlotThenRsa(
+            modulePath: ModulePath,
+            expectedPin: Pin,
+            subject: "CN=OpenSignature Multi Slot",
+            notBefore: DateTimeOffset.UtcNow.AddYears(-2),
+            notAfter: DateTimeOffset.UtcNow.AddDays(-1));
+
+        var options = CreateOptions();
+        options.PreferFirstSlotWhenAmbiguous = true;
+        options.SlotId = null;
+
+        await using var provider = new SmartCardSigningProvider(
+            options,
+            new MockPkcs11LibraryFactory(library),
+            new InMemorySigningSecretProvider(new Dictionary<string, string> { [PinSecretName] = Pin }),
+            new SigningOptions { AllowExpiredCertificates = true });
+
+        var certificates = await provider.ListCertificatesAsync();
+        Assert.Single(certificates);
+        Assert.True(certificates[0].CanSign);
+        Assert.False(certificates[0].IsCurrentlyValid());
+
+        var digest = RandomDigest(DigestAlgorithm.Sha256);
+        var signature = await provider.SignDigestAsync(
+            digest,
+            DigestAlgorithm.Sha256,
+            SigningCertificateSelector.ByThumbprint(certificates[0].Thumbprint));
+
+        Assert.NotEmpty(signature);
+    }
+
+    [Fact]
+    public async Task Multiple_slots_without_prefer_flag_fail()
+    {
+        using var library = MockPkcs11Library.CreateWithEmptySlotThenRsa(modulePath: ModulePath, expectedPin: Pin);
+        var options = CreateOptions();
+        options.PreferFirstSlotWhenAmbiguous = false;
+        options.SlotId = null;
+
+        await using var provider = new SmartCardSigningProvider(
+            options,
+            new MockPkcs11LibraryFactory(library),
+            new InMemorySigningSecretProvider(new Dictionary<string, string> { [PinSecretName] = Pin }));
+
+        var ex = await Assert.ThrowsAsync<InvalidOperationException>(() => provider.ListCertificatesAsync());
+        Assert.Contains("Multiple PKCS#11", ex.Message, StringComparison.Ordinal);
+    }
+
     private static SmartCardSigningProvider CreateProvider(MockPkcs11Library library)
     {
         var secrets = new InMemorySigningSecretProvider(new Dictionary<string, string>

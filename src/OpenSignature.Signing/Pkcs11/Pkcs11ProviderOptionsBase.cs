@@ -32,4 +32,11 @@ public abstract class Pkcs11ProviderOptionsBase
 
     /// <summary>Optional CKA_ID as hex (e.g. "01AB") for the signing certificate / key pair.</summary>
     public string? CertificateIdHex { get; set; }
+
+    /// <summary>
+    /// When true and neither <see cref="SlotId"/> nor <see cref="TokenLabel"/> is set,
+    /// choose a usable slot among multiple token-present slots instead of failing.
+    /// SafeNet/eToken middleware often exposes several virtual readers; intended for development.
+    /// </summary>
+    public bool PreferFirstSlotWhenAmbiguous { get; set; }
 }
