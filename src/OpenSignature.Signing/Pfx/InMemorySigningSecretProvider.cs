@@ -1,8 +1,9 @@
 namespace OpenSignature.Signing.Pfx;
 
 /// <summary>
-/// Development stub that resolves secrets from an in-memory map (typically bound from configuration).
-/// Replaced by a real secret manager in T113. Never log secret values.
+/// Resolves secrets from an in-memory map (tests and explicit DI overrides).
+/// Prefer <see cref="SecretStoreSigningSecretProvider"/> with <c>ISecretStore</c> in Api/Worker.
+/// Never log secret values.
 /// </summary>
 public sealed class InMemorySigningSecretProvider : ISigningSecretProvider
 {

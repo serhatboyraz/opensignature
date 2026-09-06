@@ -1,32 +1,52 @@
-# React + TypeScript + Vite
+# OpenSignature Web
 
-This template provides a minimal setup to get React working in Vite with HMR and some Oxlint rules.
+React administration/demo UI for **OpenSignature**.
 
-Currently, two official plugins are available:
+## Stack
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Oxc](https://oxc.rs)
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/)
+- React 19 + TypeScript
+- Vite 8
+- React Router
+- TanStack Query
 
-## React Compiler
+## Routes
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
+| Path | Purpose |
+|------|---------|
+| `/dashboard` | Create signature + session-tracked status list |
+| `/signatures` | Same create/list UX as dashboard |
+| `/signatures/:id` | Status detail, cancel, download when completed |
+| `/certificates` | Public certificate inventory |
+| `/providers` | Providers + per-provider health |
+| `/jobs`, `/audit`, `/settings` | Stubs / placeholders |
 
-## Expanding the Oxlint configuration
+## Run locally
 
-If you are developing a production application, we recommend enabling type-aware lint rules by installing `oxlint-tsgolint` and editing `.oxlintrc.json`:
+1. Start the API (`OpenSignature.Api`) — default HTTPS profile listens on **https://localhost:7010** (`Properties/launchSettings.json`).
+2. From this folder:
 
-```json
-{
-  "$schema": "./node_modules/oxlint/configuration_schema.json",
-  "plugins": ["react", "typescript", "oxc"],
-  "options": {
-    "typeAware": true
-  },
-  "rules": {
-    "react/rules-of-hooks": "error",
-    "react/only-export-components": ["warn", { "allowConstantExport": true }]
-  }
-}
+```bash
+npm install
+npm run dev
 ```
 
-See the [Oxlint rules documentation](https://oxc.rs/docs/guide/usage/linter/rules) for the full list of rules and categories.
+Open http://localhost:5173
+
+By default `.env.development` leaves `VITE_API_BASE_URL` empty so `/api` requests go through the Vite proxy to `https://localhost:7010` (avoids browser CORS and self-signed certificate issues).
+
+### Environment
+
+See `.env.example`:
+
+| Variable | Meaning |
+|----------|---------|
+| `VITE_API_BASE_URL` | API origin (no trailing slash). Unset → `https://localhost:7010`. Empty → same-origin / proxy. |
+| `VITE_TENANT_ID` | Optional `X-Tenant-Id` header |
+| `VITE_API_KEY` | Optional `X-Api-Key` header |
+| `VITE_PROXY_TARGET` | Vite proxy target (dev server only), default `https://localhost:7010` |
+
+## Build
+
+```bash
+npm run build
+```

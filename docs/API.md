@@ -1,72 +1,300 @@
-# API Contract
+# OpenSignature REST API
 
-## POST /api/v1/signatures
+Contract for Phase 6 signing, certificate, and provider endpoints.
 
-Creates an asynchronous signing job.
+Base path: `/api/v1`
 
-### Headers
+OpenAPI document (Development and Testing): `GET /openapi/v1.json`
 
-- `Authorization`
-- `Idempotency-Key`
+Authentication (`Authorization: ApiKey <key>` or `X-Api-Key`) is enforced when `Authentication:Enabled=true`. Default is off for local smoke tests. Callers identify the tenant with `X-Tenant-Id` (must match the API key tenant when authenticated) or the key / configured default tenant.
+
+Private keys are never returned by any endpoint. Certificate APIs expose public certificate metadata only.
+
+---
+
+## Common headers
+
+| Header | Required | Description |
+|--------|----------|-------------|
+| `Authorization` / `X-Api-Key` | Required when `Authentication:Enabled=true` | MVP API key (`Authorization: ApiKey <key>` or `X-Api-Key`). Production: OAuth2/OIDC + JWT. |
+| `X-Tenant-Id` | Recommended | Tenant scope for the request. If omitted, the API uses `Signatures:DefaultTenantId`. |
+| `Idempotency-Key` | Recommended for `POST /signatures` | Opaque client key. Replays with the same tenant + key return the original create result instead of a second job. |
+| `X-Correlation-Id` | Optional | Client correlation id propagated into logs, audit, and status responses. |
+
+---
+
+## Error model
+
+Errors use RFC 7807 Problem Details. Machine-readable codes are in the `errorCode` extension (not `code`).
+
+```json
+{
+  "type": "https://httpstatuses.com/400",
+  "title": "Invalid request",
+  "status": 400,
+  "detail": "A non-empty 'file' form field is required.",
+  "errorCode": "SIGNATURE_REQUEST_INVALID",
+  "traceId": "..."
+}
+```
+
+### Machine-readable error codes
+
+| Code | Typical HTTP status | When |
+|------|---------------------|------|
+| `SIGNATURE_REQUEST_INVALID` | 400, 413 | Missing/invalid multipart, tenant, correlation id, empty upload, or size limit |
+| `SIGNATURE_FORMAT_UNSUPPORTED` | 400 | Unknown or unsupported `format` |
+| `SIGNATURE_PROFILE_UNSUPPORTED` | 400 | Unknown or unsupported `profile` |
+| `SIGNING_PROVIDER_UNAVAILABLE` | 400 | Unknown provider type or provider not available for the request |
+| `SIGNING_CERTIFICATE_NOT_FOUND` | 400 | Requested certificate thumbprint not found |
+| `SIGNING_CERTIFICATE_EXPIRED` | 422 / job failure | Certificate expired at signing time |
+| `SIGNATURE_INPUT_NOT_FOUND` | 404 | Signature id not found for the tenant |
+| `SIGNATURE_OUTPUT_NOT_FOUND` | 409 | Signed content requested before completion (or output missing) |
+| `SIGNATURE_NOT_CANCELLABLE` | 409 | Cancel requested after signing has progressed past a cancellable state |
+| `SIGNATURE_ALREADY_COMPLETED` | 409 | Operation conflicts with a completed signature |
+| `SIGNING_OPERATION_FAILED` | 500 / job failure | Unexpected signing or API failure |
+| `SIGNING_PROVIDER_UNSUPPORTED` | job failure | Provider type not implemented for the job |
+
+Clients should treat `errorCode` as stable for branching; `detail` is human-readable and may change.
+
+---
+
+## Signatures
+
+### POST /api/v1/signatures
+
+Creates an asynchronous signing job. The API validates input, stores the file, persists metadata, enqueues work via the outbox, and returns immediately. Cryptographic signing runs in the worker — never synchronously in the API.
+
+#### Headers
+
+- `Content-Type: multipart/form-data` (required)
+- `X-Tenant-Id` (recommended)
+- `Idempotency-Key` (recommended)
 - `X-Correlation-Id` (optional)
+- `Authorization` (roadmap)
 
-### Multipart fields
+#### Multipart fields
 
-- `file`
-- `format`: `PAdES | XAdES | CAdES`
-- `profile`: `B | T | LT | LTA`
-- `signingProvider`
-- `certificateSelector`
+| Field | Required | Values / notes |
+|-------|----------|----------------|
+| `file` | Yes | Document bytes. Non-empty. Subject to `Signatures:MaxUploadBytes`. |
+| `format` | Yes | `PAdES`, `XAdES`, `CAdES`, `ASiC_S`, `ASiC_E` |
+| `profile` | Yes | `B`, `T`, `LT`, `LTA` |
+| `signingProvider` | Yes | `Pfx`, `Pkcs11`, `SmartCard`, `Hsm` |
+| `certificateThumbprint` | No | Selects a certificate known to the provider (public metadata / thumbprint only) |
 
-### Response
+Filenames and client MIME types are untrusted; storage keys are server-generated.
 
-`202 Accepted`
+#### Responses
+
+| Status | Meaning |
+|--------|---------|
+| `202 Accepted` | Job accepted. Body includes `id`, `status` (`Queued`), `createdAt`, `statusUrl`. `Location` may mirror `statusUrl`. |
+| `400 Bad Request` | Invalid form, tenant, correlation id, format, profile, provider, or certificate |
+| `413 Payload Too Large` | Upload exceeds configured max size (`SIGNATURE_REQUEST_INVALID`) |
+
+Example `202` body:
 
 ```json
 {
   "id": "0198...",
   "status": "Queued",
+  "createdAt": "2026-09-05T17:00:00Z",
   "statusUrl": "/api/v1/signatures/0198..."
 }
 ```
 
-## GET /api/v1/signatures/{id}
+---
 
-Returns the current signing state.
+### GET /api/v1/signatures/{id}
 
-## GET /api/v1/signatures/{id}/content
+Returns the current signing state for the tenant.
 
-Returns the completed signed document.
+#### Headers
 
-## POST /api/v1/signatures/{id}/cancel
+- `X-Tenant-Id` (recommended)
+- `Authorization` (roadmap)
 
-Requests cancellation if signing has not started.
+#### Path
 
-## GET /api/v1/certificates
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `id` | UUID | Signature request id |
 
-Lists certificates visible to configured signing providers.
+#### Responses
 
-## GET /api/v1/providers
+| Status | Meaning |
+|--------|---------|
+| `200 OK` | Status payload |
+| `400 Bad Request` | Invalid tenant (`SIGNATURE_REQUEST_INVALID`) |
+| `404 Not Found` | Unknown id for tenant (`SIGNATURE_INPUT_NOT_FOUND`) |
 
-Lists configured signing providers.
-
-## GET /api/v1/providers/{id}/health
-
-Returns provider availability.
-
-## Error model
-
-Use RFC 7807 Problem Details.
-
-Example:
+Example `200` body:
 
 ```json
 {
-  "type": "https://example.invalid/problems/signature-failed",
-  "title": "Signature creation failed",
-  "status": 422,
-  "code": "SIGNING_PROVIDER_ERROR",
-  "detail": "The signing provider rejected the operation.",
-  "traceId": "..."
+  "id": "0198...",
+  "tenantId": "tenant-demo",
+  "status": "Queued",
+  "format": "PAdES",
+  "profile": "B",
+  "signingProvider": "Pfx",
+  "createdAt": "2026-09-05T17:00:00Z",
+  "queuedAt": "2026-09-05T17:00:00Z",
+  "startedAt": null,
+  "completedAt": null,
+  "failedAt": null,
+  "errorCode": null,
+  "errorMessage": null,
+  "correlationId": null,
+  "statusUrl": "/api/v1/signatures/0198..."
 }
 ```
+
+`status` values include domain states such as `Queued`, `Processing`, `Completed`, `Failed`, `Cancelled`, and related intermediate states.
+
+---
+
+### GET /api/v1/signatures/{id}/content
+
+Downloads the signed document when the request is `Completed`.
+
+#### Headers
+
+- `X-Tenant-Id` (recommended)
+- `Authorization` (roadmap)
+
+#### Responses
+
+| Status | Meaning |
+|--------|---------|
+| `200 OK` | Binary body (`Content-Type` / filename from stored output metadata) |
+| `400 Bad Request` | Invalid tenant |
+| `404 Not Found` | Unknown signature (`SIGNATURE_INPUT_NOT_FOUND`) |
+| `409 Conflict` | Not ready or output missing (`SIGNATURE_OUTPUT_NOT_FOUND`) |
+
+---
+
+### POST /api/v1/signatures/{id}/cancel
+
+Requests cancellation. Reliable only before signing has progressed past a cancellable state (typically before / at early queue processing).
+
+#### Headers
+
+- `X-Tenant-Id` (recommended)
+- `Authorization` (roadmap)
+
+#### Responses
+
+| Status | Meaning |
+|--------|---------|
+| `200 OK` | Cancelled; body is the updated status payload |
+| `400 Bad Request` | Invalid tenant |
+| `404 Not Found` | Unknown signature (`SIGNATURE_INPUT_NOT_FOUND`) |
+| `409 Conflict` | Not cancellable (`SIGNATURE_NOT_CANCELLABLE`) |
+
+---
+
+## Certificates
+
+Public certificate metadata only. Endpoints never export private keys, PFX material, or hardware secrets.
+
+### GET /api/v1/certificates
+
+Lists certificates visible to configured signing providers for the tenant/context.
+
+#### Headers
+
+- `X-Tenant-Id` (recommended)
+- `Authorization` (roadmap)
+
+#### Responses (contract)
+
+| Status | Meaning |
+|--------|---------|
+| `200 OK` | Array of public certificate descriptors (e.g. id, subject, issuer, notBefore, notAfter, thumbprint, provider id) |
+| `401` / `403` | When authentication/authorization is enabled |
+
+Private key material is never included.
+
+---
+
+### GET /api/v1/certificates/{id}
+
+Returns one certificate’s public metadata.
+
+#### Path
+
+| Parameter | Description |
+|-----------|-------------|
+| `id` | Certificate identifier (implementation-defined: thumbprint or platform id) |
+
+#### Responses (contract)
+
+| Status | Meaning |
+|--------|---------|
+| `200 OK` | Public certificate metadata |
+| `404 Not Found` | Unknown certificate |
+| `401` / `403` | When auth is enabled |
+
+Does not return private keys or exportable key blobs.
+
+---
+
+## Providers
+
+### GET /api/v1/providers
+
+Lists configured signing providers (type, id, display name, enabled flag). Does not expose credentials, PIN, or keystore secrets.
+
+#### Headers
+
+- `X-Tenant-Id` (recommended)
+- `Authorization` (roadmap)
+
+#### Responses (contract)
+
+| Status | Meaning |
+|--------|---------|
+| `200 OK` | Provider list |
+| `401` / `403` | When auth is enabled |
+
+---
+
+### GET /api/v1/providers/{id}/health
+
+Returns availability / health for a single provider (reachable, certificate store accessible, etc.). Diagnostics must not include secrets.
+
+#### Path
+
+| Parameter | Description |
+|-----------|-------------|
+| `id` | Provider id |
+
+#### Responses (contract)
+
+| Status | Meaning |
+|--------|---------|
+| `200 OK` | Health payload (`status`, optional `detail`, checked-at timestamp) |
+| `404 Not Found` | Unknown provider |
+| `503 Service Unavailable` | Provider unhealthy (optional; may also be `200` with degraded status) |
+
+---
+
+## OpenAPI discovery
+
+| Environment | Document |
+|-------------|----------|
+| Development | `GET /openapi/v1.json` |
+| Testing | `GET /openapi/v1.json` |
+| Production | Not mapped by default |
+
+The generated document includes signature routes under `/api/v1/signatures`. Certificate and provider paths appear when those endpoint maps are registered.
+
+---
+
+## Notes
+
+- Document binaries are never placed in RabbitMQ messages; only job/metadata references are queued.
+- Do not silently downgrade a requested signature profile.
+- Validation / verification APIs are a later milestone (see product specification §10).

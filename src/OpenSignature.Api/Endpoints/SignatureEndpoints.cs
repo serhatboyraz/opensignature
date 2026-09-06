@@ -1,7 +1,9 @@
 using System.Globalization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Options;
+using OpenSignature.Api.Security;
 using OpenSignature.Application.Abstractions.Signatures;
+using OpenSignature.Application.Security;
 using OpenSignature.Application.Signatures;
 using OpenSignature.Domain.Enums;
 using OpenSignature.Domain.ValueObjects;
@@ -17,34 +19,69 @@ public static class SignatureEndpoints
     public const string IdempotencyHeaderName = "Idempotency-Key";
     public const string CorrelationHeaderName = "X-Correlation-Id";
 
-    public static IEndpointRouteBuilder MapSignatureEndpoints(this IEndpointRouteBuilder endpoints)
+    public static IEndpointRouteBuilder MapSignatureEndpoints(
+        this IEndpointRouteBuilder endpoints,
+        bool requireAuthorization = false)
     {
         var group = endpoints.MapGroup("/api/v1/signatures")
             .WithTags("Signatures");
 
-        group.MapPost("/", CreateSignatureAsync)
+        var create = group.MapPost("/", CreateSignatureAsync)
             .DisableAntiforgery()
             .WithName("CreateSignature")
+            .WithSummary("Create signature request")
+            .WithDescription(
+                "Accepts multipart/form-data, stores the input, enqueues asynchronous signing, and returns 202 Accepted. " +
+                "Requires form fields file, format, profile, and signingProvider. " +
+                "Optional headers: X-Tenant-Id, Idempotency-Key, X-Correlation-Id.")
             .Produces(StatusCodes.Status202Accepted)
             .ProducesProblem(StatusCodes.Status400BadRequest)
             .ProducesProblem(StatusCodes.Status413PayloadTooLarge);
+        if (requireAuthorization)
+        {
+            create.RequireAuthorization(OpenSignaturePolicies.SignaturesWrite);
+        }
 
-        group.MapGet("/{id:guid}", GetSignatureAsync)
+        var get = group.MapGet("/{id:guid}", GetSignatureAsync)
             .WithName("GetSignature")
+            .WithSummary("Get signature status")
+            .WithDescription(
+                "Returns the current signature request status for the tenant. " +
+                "Uses X-Tenant-Id or the authenticated API key tenant / configured default.")
             .Produces(StatusCodes.Status200OK)
             .ProducesProblem(StatusCodes.Status404NotFound);
+        if (requireAuthorization)
+        {
+            get.RequireAuthorization(OpenSignaturePolicies.SignaturesRead);
+        }
 
-        group.MapGet("/{id:guid}/content", GetSignatureContentAsync)
+        var content = group.MapGet("/{id:guid}/content", GetSignatureContentAsync)
             .WithName("GetSignatureContent")
+            .WithSummary("Download signed content")
+            .WithDescription(
+                "Returns the signed document bytes when status is Completed. " +
+                "Returns 409 Conflict with SIGNATURE_OUTPUT_NOT_FOUND when content is not ready.")
             .Produces(StatusCodes.Status200OK)
             .ProducesProblem(StatusCodes.Status404NotFound)
             .ProducesProblem(StatusCodes.Status409Conflict);
+        if (requireAuthorization)
+        {
+            content.RequireAuthorization(OpenSignaturePolicies.SignaturesRead);
+        }
 
-        group.MapPost("/{id:guid}/cancel", CancelSignatureAsync)
+        var cancel = group.MapPost("/{id:guid}/cancel", CancelSignatureAsync)
             .WithName("CancelSignature")
+            .WithSummary("Cancel signature request")
+            .WithDescription(
+                "Cancels a signature request when still cancellable (before signing progresses past early states). " +
+                "Returns 409 Conflict with SIGNATURE_NOT_CANCELLABLE otherwise.")
             .Produces(StatusCodes.Status200OK)
             .ProducesProblem(StatusCodes.Status404NotFound)
             .ProducesProblem(StatusCodes.Status409Conflict);
+        if (requireAuthorization)
+        {
+            cancel.RequireAuthorization(OpenSignaturePolicies.SignaturesCancel);
+        }
 
         return endpoints;
     }
@@ -324,10 +361,22 @@ public static class SignatureEndpoints
 
     private static TenantId ResolveTenantId(HttpRequest request, SignatureApiOptions options)
     {
+        string? principalTenant = null;
+        if (request.HttpContext.User.Identity?.IsAuthenticated == true)
+        {
+            principalTenant = request.HttpContext.User.FindFirst(OpenSignatureClaimTypes.TenantId)?.Value;
+        }
+
         if (request.Headers.TryGetValue(TenantHeaderName, out var tenantHeader) &&
             !string.IsNullOrWhiteSpace(tenantHeader))
         {
+            // Mismatch with the authenticated key tenant is rejected by TenantIsolationMiddleware.
             return TenantId.Create(tenantHeader.ToString());
+        }
+
+        if (!string.IsNullOrWhiteSpace(principalTenant))
+        {
+            return TenantId.Create(principalTenant);
         }
 
         return TenantId.Create(options.DefaultTenantId);

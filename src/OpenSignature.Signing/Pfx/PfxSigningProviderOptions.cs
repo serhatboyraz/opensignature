@@ -4,7 +4,7 @@ namespace OpenSignature.Signing.Pfx;
 /// Configuration for <see cref="PfxSigningProvider"/>.
 /// Supply either <see cref="Path"/> or <see cref="CertificateBytes"/> (not both).
 /// Password may come from <see cref="Password"/> (development) or
-/// <see cref="PasswordSecretName"/> resolved via <see cref="ISigningSecretProvider"/> (T113).
+/// <see cref="PasswordSecretName"/> resolved via <see cref="ISigningSecretProvider"/> / <c>ISecretStore</c>.
 /// </summary>
 public sealed class PfxSigningProviderOptions
 {
@@ -24,7 +24,7 @@ public sealed class PfxSigningProviderOptions
 
     /// <summary>
     /// Development/demo PFX password from configuration.
-    /// Prefer <see cref="PasswordSecretName"/> with a secret provider in production (T113).
+    /// Prefer <see cref="PasswordSecretName"/> with a secret provider in production.
     /// Never commit real passwords to source control.
     /// </summary>
     public string? Password { get; set; }

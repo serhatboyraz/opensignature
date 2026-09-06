@@ -1,5 +1,6 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.DependencyInjection.Extensions;
 using OpenSignature.Application.Abstractions.Messaging;
 using OpenSignature.Application.Abstractions.Persistence;
 using OpenSignature.Application.Abstractions.Signatures;
@@ -32,6 +33,8 @@ public static class ServiceCollectionExtensions
             options.UseNpgsql(connectionString));
 
         services.AddScoped<ISignatureRequestIdempotencyStore, EfSignatureRequestIdempotencyStore>();
+        services.TryAddSingleton(TimeProvider.System);
+        services.AddScoped<ISigningJobLockService, EfSigningJobLockService>();
 
         return services;
     }

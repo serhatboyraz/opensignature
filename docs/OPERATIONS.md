@@ -65,3 +65,12 @@ Worker retry defaults (`SigningJobRetry`):
 - exponential backoff from `InitialBackoffMilliseconds` (1s) with multiplier 2, capped by `MaxBackoffMilliseconds` (60s)
 - permanent failures (bad payload, cryptographic errors) go to the DLQ without further retry
 - DLQ messages include `x-attempt`, `x-failure-kind`, and `x-failure-reason` headers
+
+### Job lock and duplicate delivery
+
+Workers acquire an idempotent processing lock before signing (`ISigningJobLockService`):
+
+- Only one consumer may hold the lock for a given `SigningJob`.
+- Duplicate RabbitMQ deliveries or concurrent workers that lose the lock race ACK without signing again.
+- After a worker crash/restart, `Locked` or `Processing` jobs whose `LockedUntil` is in the past (or unset) may be reclaimed; non-expired locks are not stolen.
+- Default lock lease is 15 minutes (must exceed expected signing duration).

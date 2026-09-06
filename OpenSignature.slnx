@@ -6,6 +6,7 @@
     <Project Path="src/OpenSignature.Infrastructure/OpenSignature.Infrastructure.csproj" />
     <Project Path="src/OpenSignature.Signing.Contracts/OpenSignature.Signing.Contracts.csproj" />
     <Project Path="src/OpenSignature.Signing/OpenSignature.Signing.csproj" />
+    <Project Path="src/OpenSignature.Validation/OpenSignature.Validation.csproj" />
     <Project Path="src/OpenSignature.Worker/OpenSignature.Worker.csproj" />
   </Folder>
   <Folder Name="/tests/">
@@ -15,6 +16,7 @@
     <Project Path="tests/OpenSignature.Infrastructure.Tests/OpenSignature.Infrastructure.Tests.csproj" />
     <Project Path="tests/OpenSignature.Interop.Tests/OpenSignature.Interop.Tests.csproj" />
     <Project Path="tests/OpenSignature.Signing.Tests/OpenSignature.Signing.Tests.csproj" />
+    <Project Path="tests/OpenSignature.Validation.Tests/OpenSignature.Validation.Tests.csproj" />
     <Project Path="tests/OpenSignature.Worker.IntegrationTests/OpenSignature.Worker.IntegrationTests.csproj" />
   </Folder>
 </Solution>

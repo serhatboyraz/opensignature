@@ -1,5 +1,6 @@
 using Microsoft.EntityFrameworkCore;
 using OpenSignature.Application.Abstractions.Messaging;
+using OpenSignature.Application.Abstractions.Persistence;
 using OpenSignature.Application.Abstractions.Signing;
 using OpenSignature.Application.Abstractions.Storage;
 using OpenSignature.Application.Messages;
@@ -16,21 +17,31 @@ namespace OpenSignature.Worker.Messaging;
 /// <summary>
 /// Loads a queued signature request, invokes <see cref="ISignatureCreationService"/>,
 /// persists signed output, and updates request/job status.
+/// Processing is idempotent: an atomic job lock prevents duplicate signing under at-least-once delivery.
 /// </summary>
 public sealed class SignatureSigningJobProcessor : ISigningJobProcessor
 {
+    /// <summary>
+    /// Lock lease duration. Expired Locked/Processing jobs may be reclaimed after worker crash/restart.
+    /// Must exceed expected signing time to avoid mid-flight reclaim races.
+    /// </summary>
+    internal static readonly TimeSpan LockDuration = TimeSpan.FromMinutes(15);
+
     private readonly OpenSignatureDbContext _db;
+    private readonly ISigningJobLockService _jobLock;
     private readonly IFileStorage _fileStorage;
     private readonly ISignatureCreationService _signatureCreation;
     private readonly ILogger<SignatureSigningJobProcessor> _logger;
 
     public SignatureSigningJobProcessor(
         OpenSignatureDbContext db,
+        ISigningJobLockService jobLock,
         IFileStorage fileStorage,
         ISignatureCreationService signatureCreation,
         ILogger<SignatureSigningJobProcessor> logger)
     {
         _db = db ?? throw new ArgumentNullException(nameof(db));
+        _jobLock = jobLock ?? throw new ArgumentNullException(nameof(jobLock));
         _fileStorage = fileStorage ?? throw new ArgumentNullException(nameof(fileStorage));
         _signatureCreation = signatureCreation ?? throw new ArgumentNullException(nameof(signatureCreation));
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
@@ -83,17 +94,27 @@ public sealed class SignatureSigningJobProcessor : ISigningJobProcessor
             return;
         }
 
+        var acquired = await _jobLock
+            .TryAcquireAsync(job.Id, LockDuration, cancellationToken)
+            .ConfigureAwait(false);
+
+        if (!acquired)
+        {
+            _logger.LogInformation(
+                "Skipping signing job {JobId}; lock not acquired (duplicate delivery or active lock held by another worker)",
+                message.JobId);
+            return;
+        }
+
+        // Conditional UPDATE bypasses the change tracker; reload before domain transitions.
+        await _db.Entry(job).ReloadAsync(cancellationToken).ConfigureAwait(false);
+
         if (request.Status is SignatureStatus.Queued or SignatureStatus.RetryScheduled)
         {
             request.MarkProcessing();
         }
 
-        if (job.Status is SigningJobStatus.Pending or SigningJobStatus.Failed)
-        {
-            job.AcquireLock(DateTimeOffset.UtcNow.AddMinutes(15));
-            job.MarkProcessing();
-        }
-        else if (job.Status == SigningJobStatus.Locked)
+        if (job.Status == SigningJobStatus.Locked)
         {
             job.MarkProcessing();
         }
@@ -179,6 +200,22 @@ public sealed class SignatureSigningJobProcessor : ISigningJobProcessor
 
         await using (signed.Content)
         {
+            // Never double-write when another worker already completed this signature.
+            await _db.Entry(request).ReloadAsync(cancellationToken).ConfigureAwait(false);
+            await _db.Entry(job).ReloadAsync(cancellationToken).ConfigureAwait(false);
+
+            if (request.Status is SignatureStatus.Completed or SignatureStatus.Cancelled or SignatureStatus.Rejected
+                || job.Status is SigningJobStatus.Completed or SigningJobStatus.Cancelled)
+            {
+                _logger.LogInformation(
+                    "Skipping signed output write for job {JobId}; signature {SignatureId} is already {RequestStatus}/{JobStatus}",
+                    message.JobId,
+                    message.SignatureId,
+                    request.Status,
+                    job.Status);
+                return;
+            }
+
             var outputKey = SignatureStorageKeys.ForSigned(tenantId, request.Id, request.CreatedAt);
             var contentType = string.IsNullOrWhiteSpace(signed.ContentType)
                 ? "application/octet-stream"

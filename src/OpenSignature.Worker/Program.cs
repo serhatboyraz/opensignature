@@ -2,6 +2,7 @@ using OpenSignature.Application.Abstractions.Messaging;
 using OpenSignature.Application.Messaging;
 using OpenSignature.Infrastructure;
 using OpenSignature.Infrastructure.Messaging;
+using OpenSignature.Infrastructure.Secrets;
 using OpenSignature.Infrastructure.Storage;
 using OpenSignature.Signing;
 using OpenSignature.Signing.Pfx;
@@ -19,6 +20,7 @@ builder.Services.Configure<SigningJobRetryOptions>(
     builder.Configuration.GetSection(SigningJobRetryOptions.SectionName));
 
 builder.Services.AddPersistence(connectionString);
+builder.Services.AddSecretStores(builder.Configuration);
 builder.Services.AddLocalFileStorage(options =>
 {
     builder.Configuration.GetSection(LocalFileStorageOptions.SectionName).Bind(options);

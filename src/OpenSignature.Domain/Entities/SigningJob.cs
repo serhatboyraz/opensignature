@@ -72,6 +72,24 @@ public sealed class SigningJob
             completedAt: null);
     }
 
+    /// <summary>
+    /// Returns <c>true</c> when <see cref="LockedUntil"/> is missing or not after <paramref name="utcNow"/>.
+    /// Expired (or missing) locks may be reclaimed after a worker crash or restart.
+    /// </summary>
+    public bool IsLockExpired(DateTimeOffset utcNow) =>
+        LockedUntil is null || LockedUntil <= utcNow;
+
+    /// <summary>
+    /// Returns <c>true</c> when this job may be locked: Pending/Failed, or Locked/Processing with an expired lock.
+    /// Active (non-expired) Locked/Processing jobs must not be stolen by another worker.
+    /// </summary>
+    public bool CanAcquireOrReclaim(DateTimeOffset utcNow) =>
+        Status is SigningJobStatus.Pending or SigningJobStatus.Failed
+        || ((Status is SigningJobStatus.Locked or SigningJobStatus.Processing) && IsLockExpired(utcNow));
+
+    /// <summary>
+    /// Transitions Pending or Failed → Locked. Prefer <see cref="AcquireOrReclaimLock"/> when reclaiming expired locks.
+    /// </summary>
     public void AcquireLock(DateTimeOffset lockedUntil, DateTimeOffset? startedAt = null)
     {
         if (Status is not (SigningJobStatus.Pending or SigningJobStatus.Failed))
@@ -79,9 +97,32 @@ public sealed class SigningJob
             throw new DomainException($"Cannot lock signing job in status {Status}.");
         }
 
+        ApplyLock(lockedUntil, startedAt ?? DateTimeOffset.UtcNow);
+    }
+
+    /// <summary>
+    /// Acquires a lock from Pending/Failed, or reclaims an expired Locked/Processing lock after worker crash/restart.
+    /// </summary>
+    public void AcquireOrReclaimLock(
+        DateTimeOffset lockedUntil,
+        DateTimeOffset? utcNow = null,
+        DateTimeOffset? startedAt = null)
+    {
+        var now = utcNow ?? DateTimeOffset.UtcNow;
+        if (!CanAcquireOrReclaim(now))
+        {
+            throw new DomainException(
+                $"Cannot acquire or reclaim signing job lock in status {Status} with LockedUntil {LockedUntil}.");
+        }
+
+        ApplyLock(lockedUntil, startedAt ?? now);
+    }
+
+    private void ApplyLock(DateTimeOffset lockedUntil, DateTimeOffset startedAt)
+    {
         Status = SigningJobStatus.Locked;
         LockedUntil = lockedUntil;
-        StartedAt = startedAt ?? DateTimeOffset.UtcNow;
+        StartedAt = startedAt;
         LastError = null;
     }
 

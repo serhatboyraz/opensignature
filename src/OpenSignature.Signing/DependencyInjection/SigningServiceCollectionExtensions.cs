@@ -1,12 +1,16 @@
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
+using OpenSignature.Application.Abstractions.Secrets;
 using OpenSignature.Application.Abstractions.Signing;
 using OpenSignature.Signing.Contracts;
 using OpenSignature.Signing.Formats.Cades;
 using OpenSignature.Signing.Formats.Pades;
 using OpenSignature.Signing.Formats.Xades;
+using OpenSignature.Signing.Hsm;
 using OpenSignature.Signing.Orchestration;
 using OpenSignature.Signing.Pfx;
+using OpenSignature.Signing.Pkcs11;
+using OpenSignature.Signing.SmartCard;
 
 namespace OpenSignature.Signing;
 
@@ -33,8 +37,9 @@ public static class SigningServiceCollectionExtensions
     /// <summary>
     /// Registers <see cref="PfxSigningProvider"/> as a singleton <see cref="ISigningProvider"/>
     /// and ensures <see cref="ISigningProviderResolver"/> is available.
-    /// Password resolution uses <see cref="InMemorySigningSecretProvider"/> when secrets are supplied;
-    /// otherwise <see cref="PfxSigningProviderOptions.Password"/> is used (development only).
+    /// Password resolution uses an explicit in-memory map when <paramref name="secrets"/> is supplied;
+    /// otherwise wires <see cref="SecretStoreSigningSecretProvider"/> when <see cref="ISecretStore"/> is registered,
+    /// falling back to <see cref="PfxSigningProviderOptions.Password"/> (development only).
     /// </summary>
     public static IServiceCollection AddPfxSigningProvider(
         this IServiceCollection services,
@@ -45,15 +50,70 @@ public static class SigningServiceCollectionExtensions
         ArgumentNullException.ThrowIfNull(configure);
 
         services.Configure(configure);
-
-        if (secrets is not null)
-        {
-            services.AddSingleton<ISigningSecretProvider>(new InMemorySigningSecretProvider(secrets));
-        }
+        RegisterSigningSecrets(services, secrets);
 
         services.AddSingleton<ISigningProvider, PfxSigningProvider>();
         services.AddSigningProviderResolver();
         return services;
+    }
+
+    /// <summary>
+    /// Registers <see cref="SmartCardSigningProvider"/> as a singleton <see cref="ISigningProvider"/>.
+    /// Requires a registered <see cref="IPkcs11LibraryFactory"/> (use mock factory in tests; no real hardware in CI).
+    /// PIN is resolved via <see cref="Pkcs11.Pkcs11ProviderOptionsBase.PinSecretName"/> and <see cref="ISigningSecretProvider"/>.
+    /// </summary>
+    public static IServiceCollection AddSmartCardSigningProvider(
+        this IServiceCollection services,
+        Action<SmartCardSigningProviderOptions> configure,
+        IEnumerable<KeyValuePair<string, string>>? secrets = null)
+    {
+        ArgumentNullException.ThrowIfNull(services);
+        ArgumentNullException.ThrowIfNull(configure);
+
+        services.Configure(configure);
+        RegisterSigningSecrets(services, secrets);
+        services.AddSingleton<ISigningProvider, SmartCardSigningProvider>();
+        services.AddSigningProviderResolver();
+        return services;
+    }
+
+    /// <summary>
+    /// Registers <see cref="HsmSigningProvider"/> as a singleton <see cref="ISigningProvider"/>.
+    /// Requires a registered <see cref="IPkcs11LibraryFactory"/> (use mock factory in tests; no real hardware in CI).
+    /// PIN is resolved via <see cref="Pkcs11.Pkcs11ProviderOptionsBase.PinSecretName"/> and <see cref="ISigningSecretProvider"/>.
+    /// </summary>
+    public static IServiceCollection AddHsmSigningProvider(
+        this IServiceCollection services,
+        Action<HsmSigningProviderOptions> configure,
+        IEnumerable<KeyValuePair<string, string>>? secrets = null)
+    {
+        ArgumentNullException.ThrowIfNull(services);
+        ArgumentNullException.ThrowIfNull(configure);
+
+        services.Configure(configure);
+        RegisterSigningSecrets(services, secrets);
+        services.AddSingleton<ISigningProvider, HsmSigningProvider>();
+        services.AddSigningProviderResolver();
+        return services;
+    }
+
+    private static void RegisterSigningSecrets(
+        IServiceCollection services,
+        IEnumerable<KeyValuePair<string, string>>? secrets)
+    {
+        if (secrets is not null)
+        {
+            services.AddSingleton<ISigningSecretProvider>(new InMemorySigningSecretProvider(secrets));
+            return;
+        }
+
+        services.TryAddSingleton<ISigningSecretProvider>(static sp =>
+        {
+            var store = sp.GetService<ISecretStore>();
+            return store is null
+                ? new InMemorySigningSecretProvider([])
+                : new SecretStoreSigningSecretProvider(store);
+        });
     }
 
     /// <summary>

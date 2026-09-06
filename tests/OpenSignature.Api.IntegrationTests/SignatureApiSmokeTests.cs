@@ -10,6 +10,7 @@ using Testcontainers.RabbitMq;
 
 namespace OpenSignature.Api.IntegrationTests;
 
+[Collection(ApiIntegrationCollection.Name)]
 public sealed class SignatureApiSmokeTests : IAsyncLifetime
 {
     private readonly PostgreSqlContainer _postgres = new PostgreSqlBuilder("postgres:16-alpine")

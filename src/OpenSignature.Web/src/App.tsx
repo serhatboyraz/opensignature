@@ -1,21 +1,68 @@
-import './App.css'
+import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom'
+import { Layout } from './components/Layout'
+import { StubPage } from './components/StubPage'
+import { CertificatesPage } from './pages/CertificatesPage'
+import { ProvidersPage } from './pages/ProvidersPage'
+import { SignatureDashboardPage } from './pages/SignatureDashboardPage'
+import { SignatureDetailPage } from './pages/SignatureDetailPage'
 
-function App() {
+export default function App() {
   return (
-    <main className="shell">
-      <header className="brand">
-        <p className="eyebrow">OpenSignature</p>
-        <h1>E-Signature Platform</h1>
-        <p className="lede">
-          Asynchronous PAdES, XAdES and CAdES signing with hardware-ready providers.
-        </p>
-      </header>
-      <section className="status">
-        <h2>Development shell</h2>
-        <p>React UI bootstrap is ready. Signature workflows arrive in later tasks.</p>
-      </section>
-    </main>
+    <BrowserRouter>
+      <Routes>
+        <Route element={<Layout />}>
+          <Route index element={<Navigate to="/dashboard" replace />} />
+          <Route
+            path="dashboard"
+            element={
+              <SignatureDashboardPage
+                title="Dashboard"
+                intro="Create a signing job and watch session-tracked requests move through the queue."
+              />
+            }
+          />
+          <Route
+            path="signatures"
+            element={
+              <SignatureDashboardPage
+                title="Signatures"
+                intro="Upload a document, choose format and provider, then follow asynchronous status polling."
+              />
+            }
+          />
+          <Route path="signatures/:id" element={<SignatureDetailPage />} />
+          <Route path="certificates" element={<CertificatesPage />} />
+          <Route path="providers" element={<ProvidersPage />} />
+          <Route
+            path="jobs"
+            element={
+              <StubPage
+                title="Jobs"
+                description="Worker job inspection UI is planned for a later release."
+              />
+            }
+          />
+          <Route
+            path="audit"
+            element={
+              <StubPage
+                title="Audit"
+                description="Audit trail browsing will appear once audit APIs are exposed to the UI."
+              />
+            }
+          />
+          <Route
+            path="settings"
+            element={
+              <StubPage
+                title="Settings"
+                description="Tenant and environment settings will live here. For now, configure VITE_* env vars."
+              />
+            }
+          />
+          <Route path="*" element={<Navigate to="/dashboard" replace />} />
+        </Route>
+      </Routes>
+    </BrowserRouter>
   )
 }
-
-export default App

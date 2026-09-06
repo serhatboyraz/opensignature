@@ -371,21 +371,21 @@
   - `feat(api): add asynchronous signature endpoints`
 
 ### T061 — Certificate API
-- Status: `TODO`
+- Status: `DONE`
 - Priority: P1
 - Depends on: T040
 - Commit:
   - `feat(api): add certificate endpoints`
 
 ### T062 — Provider API
-- Status: `TODO`
+- Status: `DONE`
 - Priority: P1
 - Depends on: T040
 - Commit:
   - `feat(api): add signing provider endpoints`
 
 ### T063 — OpenAPI
-- Status: `TODO`
+- Status: `DONE`
 - Priority: P0
 - Depends on: T060
 - Commit:
@@ -416,7 +416,7 @@
   - `feat(worker): complete asynchronous signing pipeline`
 
 ### T071 — Duplicate Processing Protection
-- Status: `TODO`
+- Status: `DONE`
 - Priority: P0
 - Depends on: T070
 - Tests:
@@ -430,43 +430,45 @@
 
 ## Phase 8 — ASiC and Advanced Profiles
 
+> **Skipped for now** (per product roadmap prioritization). Revisit after Phases 7/9–11/13.
+
 ### T080 — ASiC-S
-- Status: `TODO`
+- Status: `SKIPPED`
 - Priority: P1
 - Depends on: T051, T052
 - Commit:
   - `feat(signing): add ASiC-S container support`
 
 ### T081 — ASiC-E
-- Status: `TODO`
+- Status: `SKIPPED`
 - Priority: P1
 - Depends on: T080
 - Commit:
   - `feat(signing): add ASiC-E container support`
 
 ### T082 — RFC 3161 Timestamping
-- Status: `TODO`
+- Status: `SKIPPED`
 - Priority: P1
 - Depends on: T051, T052, T053
 - Commit:
   - `feat(timestamp): add RFC 3161 timestamp provider`
 
 ### T083 — PAdES-T/LT/LTA
-- Status: `TODO`
+- Status: `SKIPPED`
 - Priority: P1
 - Depends on: T053, T082
 - Commit:
   - `feat(signing): add advanced PAdES profiles`
 
 ### T084 — XAdES-T/LT/LTA
-- Status: `TODO`
+- Status: `SKIPPED`
 - Priority: P1
 - Depends on: T052, T082
 - Commit:
   - `feat(signing): add advanced XAdES profiles`
 
 ### T085 — CAdES-T/LT/LTA
-- Status: `TODO`
+- Status: `SKIPPED`
 - Priority: P1
 - Depends on: T051, T082
 - Commit:
@@ -477,7 +479,7 @@
 ## Phase 9 — Validation
 
 ### T090 — Certificate Validation Engine
-- Status: `TODO`
+- Status: `DONE`
 - Priority: P1
 - Depends on: T040
 - Scope:
@@ -493,14 +495,14 @@
   - `feat(validation): add certificate validation engine`
 
 ### T091 — Signature Validation
-- Status: `TODO`
+- Status: `DONE`
 - Priority: P1
 - Depends on: T090, T051, T052, T053
 - Commit:
   - `feat(validation): add signature validation service`
 
 ### T092 — Validation Reports
-- Status: `TODO`
+- Status: `DONE`
 - Priority: P1
 - Depends on: T091
 - Commit:
@@ -511,14 +513,14 @@
 ## Phase 10 — Hardware
 
 ### T100 — PKCS#11 Abstraction
-- Status: `TODO`
+- Status: `DONE`
 - Priority: P1
 - Depends on: T040
 - Commit:
   - `feat(signing): add PKCS11 provider abstraction`
 
 ### T101 — USB Token / Smart Card Provider
-- Status: `TODO`
+- Status: `DONE`
 - Priority: P1
 - Depends on: T100
 - Scope:
@@ -534,7 +536,7 @@
   - `feat(signing): add smart card signing provider`
 
 ### T102 — HSM Provider
-- Status: `TODO`
+- Status: `DONE`
 - Priority: P1
 - Depends on: T100
 - Scope:
@@ -550,21 +552,21 @@
 ## Phase 11 — Security
 
 ### T110 — Authentication
-- Status: `TODO`
+- Status: `DONE`
 - Priority: P1
 - Depends on: T060
 - Commit:
   - `feat(security): add API authentication`
 
 ### T111 — Authorization / RBAC
-- Status: `TODO`
+- Status: `DONE`
 - Priority: P1
 - Depends on: T110
 - Commit:
   - `feat(security): add role based authorization`
 
 ### T112 — Tenant Isolation
-- Status: `TODO`
+- Status: `DONE`
 - Priority: P1
 - Depends on: T111
 - Tests:
@@ -573,7 +575,7 @@
   - `feat(security): enforce tenant isolation`
 
 ### T113 — Secret Management
-- Status: `TODO`
+- Status: `DONE`
 - Priority: P0
 - Depends on: T041
 - Scope:
@@ -613,28 +615,28 @@
 ## Phase 13 — React
 
 ### T130 — React Application Shell
-- Status: `TODO`
+- Status: `DONE`
 - Priority: P1
 - Depends on: T001
 - Commit:
   - `feat(web): bootstrap React application`
 
 ### T131 — Signature Dashboard
-- Status: `TODO`
+- Status: `DONE`
 - Priority: P1
 - Depends on: T130, T060
 - Commit:
   - `feat(web): add signature dashboard`
 
 ### T132 — Signature Detail
-- Status: `TODO`
+- Status: `DONE`
 - Priority: P1
 - Depends on: T131
 - Commit:
   - `feat(web): add signature detail page`
 
 ### T133 — Provider and Certificate UI
-- Status: `TODO`
+- Status: `DONE`
 - Priority: P1
 - Depends on: T061, T062
 - Commit:

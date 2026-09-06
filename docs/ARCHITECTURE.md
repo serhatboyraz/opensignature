@@ -70,6 +70,7 @@ Local dependencies: PostgreSQL and RabbitMQ via `docker-compose.yml`. Solution f
 | `OpenSignature.Infrastructure` | EF Core, PostgreSQL, storage adapters, RabbitMQ, outbox |
 | `OpenSignature.Signing.Contracts` | `ISigningProvider` and shared signing contracts |
 | `OpenSignature.Signing` | Provider implementations and format engines |
+| `OpenSignature.Validation` | Certificate + signature validation (Baseline B) and JSON reports |
 | `OpenSignature.Worker` | Consumes jobs; signs; updates state |
 | `OpenSignature.Web` | React admin/demo UI |
 
@@ -131,11 +132,15 @@ ISigningProvider
 
 Provider capabilities: list certificates, metadata, create digest, sign digest, health/availability, session cleanup.
 
-**PFX (dev/demo):** `PfxSigningProvider` loads PKCS#12 from a configured path or in-memory bytes (`PfxSigningProviderOptions`). Password may come from options (development) or `ISigningSecretProvider` via `PasswordSecretName` (secret-store stub until T113). Certificates without a usable RSA/ECDSA private key, or outside their validity window, are listed with `CanSign=false`. Health reflects load success (`Healthy` / `Degraded` / `Unavailable`). Never commit PFX files or passwords.
+**PFX (dev/demo):** `PfxSigningProvider` loads PKCS#12 from a configured path or in-memory bytes (`PfxSigningProviderOptions`). Password may come from options (development) or `ISigningSecretProvider` via `PasswordSecretName`, backed by `ISecretStore` (`ConfigurationSecretStore` / `EnvironmentSecretStore` / `RotatingSecretStore`). Certificates without a usable RSA/ECDSA private key, or outside their validity window, are listed with `CanSign=false`. Health reflects load success (`Healthy` / `Degraded` / `Unavailable`). Never commit PFX files or passwords.
 
-**Provider selection:** `ISigningProviderResolver` / `SigningProviderSelector` resolves a registered `ISigningProvider` by `SigningProviderType` and optional provider id from the request/configuration. Providers are registered in DI as `IEnumerable<ISigningProvider>` (e.g. `AddPfxSigningProvider`). Unsupported or ambiguous selections throw `UnsupportedSigningProviderException` (`SIGNING_PROVIDER_UNSUPPORTED`).
+**PKCS#11 (T100–T102):** Abstractions as `IPkcs11Library` / `IPkcs11Slot` / `IPkcs11Session` / `IPkcs11LibraryFactory` under `OpenSignature.Signing.Pkcs11`. Providers call `SignDigest` on-device; private keys are never exported. `MockPkcs11Library` holds an in-memory RSA/ECDSA key for CI (no real hardware). `SmartCardSigningProvider` uses short-lived sessions (open → login → use → close) via `AddSmartCardSigningProvider`. `HsmSigningProvider` uses a bounded `Pkcs11SessionPool` (`MaxConcurrentSessions`) via `AddHsmSigningProvider`; health reports module and pool availability. Token PIN is resolved only via `PinSecretName` + `ISigningSecretProvider` and must never be logged.
+
+**Provider selection:** `ISigningProviderResolver` / `SigningProviderSelector` resolves a registered `ISigningProvider` by `SigningProviderType` and optional provider id from the request/configuration. Providers are registered in DI as `IEnumerable<ISigningProvider>` (e.g. `AddPfxSigningProvider`, `AddSmartCardSigningProvider`, `AddHsmSigningProvider`). Unsupported or ambiguous selections throw `UnsupportedSigningProviderException` (`SIGNING_PROVIDER_UNSUPPORTED`).
 
 **Signature engine (T050–T054):** `AddSignatureEngine` registers PFX + CAdES/XAdES/PAdES Baseline B format signers + `SignatureOrchestrator` as `ISignatureCreationService`. Crypto primitives live under `OpenSignature.Signing.Crypto`. Format signers never export private keys; digests are signed via `ISigningProvider.SignDigestAsync`. Unsupported profiles/formats throw `SIGNATURE_PROFILE_UNSUPPORTED` / `SIGNATURE_FORMAT_UNSUPPORTED` (no silent downgrade). See `docs/SIGNATURE-PROFILES.md`.
+
+**Validation (T090–T092):** Library-first (`OpenSignature.Validation`). `ICertificateValidator` runs PRODUCT-SPEC §20 pipeline (validity → chain/trust → key usage → EKU → revocation → policy) with machine-readable codes. `IRevocationChecker` supports Offline/Online/SoftFail (OCSP then CRL; live fetch not enabled in MVP — stub-friendly). `ISignatureValidator` verifies CAdES/XAdES/PAdES Baseline B crypto + certificate path. `IValidationReportBuilder` emits JSON-serializable reports. Register via `AddOpenSignatureValidation`. No `/api/v1/validations` endpoints in MVP (avoids Program.cs coupling). Not full ETSI EN 319 102-1 AdES conformance.
 
 **Hardware rule:** for PKCS#11, smart card, and HSM providers, private keys never leave the device. Prefer:
 
@@ -189,7 +194,13 @@ Reliable publication without dual-write loss:
 2. A publisher drains unpublished outbox rows to RabbitMQ.
 3. Mark published only after successful broker handoff.
 
-Worker consumption must be **idempotent** (job lock / state checks) so at-least-once delivery does not create duplicate successful signatures.
+Worker consumption must be **idempotent** so at-least-once delivery does not create duplicate successful signatures:
+
+1. Skip when the signature request or job is already terminal (`Completed` / `Cancelled` / `Rejected`).
+2. Atomically try-acquire a job lock (`ISigningJobLockService` / conditional PostgreSQL `UPDATE`): only one worker may transition `Pending`/`Failed` → `Locked`, or reclaim `Locked`/`Processing` when `LockedUntil` is missing or in the past.
+3. If the lock is not acquired (duplicate delivery or another worker holds a non-expired lock), log and ACK without signing.
+4. After crash/restart, expired `Locked`/`Processing` jobs may be reclaimed; active (non-expired) locks must not be stolen. Lock duration must exceed expected signing time.
+5. Before writing signed output, re-check terminal state so a late worker never double-writes after another completion.
 
 ## 9. Multi-Tenancy Notes
 
