@@ -573,11 +573,11 @@ MVP:
 - CMS signature container
 - Signing certificate embedding where required
 - Signature appearance optional (uygulandı: PAdES görünür damga, not ve/veya JPEG/PNG).
+- ek imzalar artımlı güncelleme ile (benzersiz `OpenSignatureN` alanları; görünür damgalar mevcut widget'ların üzerine binmez).
 
 Sonraki:
 
 - mevcut imza alanı yeniden kullanımı
-- multiple signatures
 - VRI sözlüğü.
 
 Uygulandı (Faz 8): RFC 3161 imza zaman damgası (T), DSS (sertifika/CRL/OCSP, LT), belge zaman damgası `/SubFilter /ETSI.RFC3161` (LTA). Profiller sessizce B'ye düşürülmez.

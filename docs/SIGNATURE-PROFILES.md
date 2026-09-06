@@ -73,11 +73,11 @@ Default is `SigningCertificateOnlyValidationDataProvider` (signing certificate o
 
 ### PAdES
 
-- **B:** PDF incremental update with `/ByteRange`, `/Contents` hex CMS, `/SubFilter /ETSI.CAdES.detached`. Optional visible appearance (stamp text, note, JPEG/PNG). Appearance images are stored as `appearance.bin` and never placed on RabbitMQ.
+- **B:** PDF incremental update with `/ByteRange`, `/Contents` hex CMS, `/SubFilter /ETSI.CAdES.detached`. Optional visible appearance (stamp text, note, JPEG/PNG). Appearance images are stored as `appearance.bin` and never placed on RabbitMQ. A later PAdES request on an already-signed PDF appends a new signature (unique `OpenSignatureN` field); visible widgets are placed so they do not overlap existing annotations.
 - **T:** CMS signature timestamp (same CAdES-T unsigned attribute). Contents reservation is enlarged for advanced profiles.
 - **LT:** DSS incremental update (certs, CRLs, OCSPs) plus CAdES LT unsigned attributes in the signature CMS. Stored `/ByteRange` is preserved after DSS; it is not recomputed from the new file length.
 - **LTA:** DSS plus a document timestamp (`DocTimeStamp`, `/SubFilter /ETSI.RFC3161`). The CMS is enhanced as LT (not a CAdES archive timestamp); the PDF-level document timestamp is the archival proof.
-- **Gaps:** no pre-existing signature field reuse, no VRI dictionary, no multiple-signature orchestration beyond incremental append, no interactive page-coordinate placement UI.
+- **Gaps:** no pre-existing signature field reuse, no VRI dictionary, no interactive page-coordinate placement UI.
 
 ### ASiC-S
 

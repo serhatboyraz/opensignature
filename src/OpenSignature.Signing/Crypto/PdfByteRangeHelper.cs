@@ -64,38 +64,47 @@ public static partial class PdfByteRangeHelper
     public static int[] ReadStoredByteRange(byte[] pdf)
     {
         ArgumentNullException.ThrowIfNull(pdf);
-        var ascii = Encoding.ASCII.GetString(pdf);
-        var dictStart = FindLastCadesSignatureDictionary(ascii);
-        var index = ascii.IndexOf("/ByteRange", dictStart, StringComparison.Ordinal);
-        if (index < 0)
+        var signatures = EnumerateCadesSignatures(pdf);
+        if (signatures.Count == 0)
         {
             throw new InvalidOperationException("PDF does not contain a /ByteRange array.");
         }
 
-        var rangeStart = ascii.IndexOf('[', index);
-        var rangeEnd = ascii.IndexOf(']', rangeStart + 1);
-        if (rangeStart < 0 || rangeEnd < 0)
-        {
-            throw new InvalidOperationException("PDF /ByteRange brackets were not found.");
-        }
+        return signatures[^1].ByteRange.ToArray();
+    }
 
-        var inner = ascii.Substring(rangeStart + 1, rangeEnd - rangeStart - 1)
-            .Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries);
-        if (inner.Length != 4)
+    /// <summary>
+    /// Enumerates every PAdES CAdES signature dictionary in document order (incremental updates last).
+    /// Document timestamps (<c>/ETSI.RFC3161</c>) are not included.
+    /// </summary>
+    public static IReadOnlyList<PadesEmbeddedCadesSignature> EnumerateCadesSignatures(byte[] pdf)
+    {
+        ArgumentNullException.ThrowIfNull(pdf);
+        var ascii = Encoding.ASCII.GetString(pdf);
+        const string marker = "/SubFilter /ETSI.CAdES.detached";
+        var results = new List<PadesEmbeddedCadesSignature>();
+        var searchFrom = 0;
+        while (true)
         {
-            throw new InvalidOperationException("PDF /ByteRange must contain four integers.");
-        }
-
-        var values = new int[4];
-        for (var i = 0; i < 4; i++)
-        {
-            if (!int.TryParse(inner[i], NumberStyles.Integer, CultureInfo.InvariantCulture, out values[i]))
+            var sub = ascii.IndexOf(marker, searchFrom, StringComparison.Ordinal);
+            if (sub < 0)
             {
-                throw new InvalidOperationException($"PDF /ByteRange value '{inner[i]}' is not an integer.");
+                break;
             }
+
+            searchFrom = sub + marker.Length;
+            var dictEnd = ascii.IndexOf(">>", sub, StringComparison.Ordinal);
+            if (dictEnd < 0)
+            {
+                throw new InvalidOperationException("PAdES signature dictionary is unterminated.");
+            }
+
+            var byteRange = ParseByteRange(ascii, sub, dictEnd);
+            var cms = ParseContentsCms(ascii, sub, dictEnd);
+            results.Add(new PadesEmbeddedCadesSignature(byteRange, cms));
         }
 
-        return values;
+        return results;
     }
 
     public static PdfContentsPlaceholder FindContentsPlaceholder(
@@ -237,17 +246,58 @@ public static partial class PdfByteRangeHelper
     public static byte[] ExtractCmsFromContents(byte[] pdf)
     {
         ArgumentNullException.ThrowIfNull(pdf);
-        var ascii = Encoding.ASCII.GetString(pdf);
-        var dictStart = FindLastCadesSignatureDictionary(ascii);
-        var match = ContentsPlaceholderRegex().Match(ascii, dictStart);
-        if (!match.Success)
+        var signatures = EnumerateCadesSignatures(pdf);
+        if (signatures.Count == 0)
         {
             throw new InvalidOperationException("PDF does not contain a /Contents <...> value.");
         }
 
-        var hex = match.Groups["hex"].Value;
-        // Trim trailing padding zeros conservatively while keeping valid DER
-        var cms = Convert.FromHexString(hex);
+        return signatures[^1].Cms;
+    }
+
+    private static int[] ParseByteRange(string ascii, int fromInclusive, int toExclusive)
+    {
+        var index = ascii.IndexOf("/ByteRange", fromInclusive, StringComparison.Ordinal);
+        if (index < 0 || index >= toExclusive)
+        {
+            throw new InvalidOperationException("PDF signature dictionary is missing /ByteRange.");
+        }
+
+        var rangeStart = ascii.IndexOf('[', index);
+        var rangeEnd = ascii.IndexOf(']', rangeStart + 1);
+        if (rangeStart < 0 || rangeEnd < 0 || rangeEnd > toExclusive)
+        {
+            throw new InvalidOperationException("PDF /ByteRange brackets were not found.");
+        }
+
+        var inner = ascii.Substring(rangeStart + 1, rangeEnd - rangeStart - 1)
+            .Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries);
+        if (inner.Length != 4)
+        {
+            throw new InvalidOperationException("PDF /ByteRange must contain four integers.");
+        }
+
+        var values = new int[4];
+        for (var i = 0; i < 4; i++)
+        {
+            if (!int.TryParse(inner[i], NumberStyles.Integer, CultureInfo.InvariantCulture, out values[i]))
+            {
+                throw new InvalidOperationException($"PDF /ByteRange value '{inner[i]}' is not an integer.");
+            }
+        }
+
+        return values;
+    }
+
+    private static byte[] ParseContentsCms(string ascii, int fromInclusive, int toExclusive)
+    {
+        var match = ContentsPlaceholderRegex().Match(ascii, fromInclusive);
+        if (!match.Success || match.Index >= toExclusive)
+        {
+            throw new InvalidOperationException("PDF signature dictionary is missing /Contents <...>.");
+        }
+
+        var cms = Convert.FromHexString(match.Groups["hex"].Value);
         return TrimDerPadding(cms);
     }
 
@@ -275,17 +325,6 @@ public static partial class PdfByteRangeHelper
         }
 
         return cms;
-    }
-
-    private static int FindLastCadesSignatureDictionary(string ascii)
-    {
-        var index = ascii.LastIndexOf("/SubFilter /ETSI.CAdES.detached", StringComparison.Ordinal);
-        if (index < 0)
-        {
-            throw new InvalidOperationException("PDF does not contain a PAdES CAdES signature dictionary.");
-        }
-
-        return Math.Max(0, index - 80);
     }
 
     private static int ReadAsn1Length(byte[] data, ref int offset)
@@ -327,3 +366,6 @@ public sealed record PdfContentsPlaceholder(
     int ContentsHexLength,
     int ContentsSpanStart,
     int ContentsSpanEndExclusive);
+
+/// <summary>One embedded PAdES CAdES signature (ByteRange + CMS DER).</summary>
+public sealed record PadesEmbeddedCadesSignature(IReadOnlyList<int> ByteRange, byte[] Cms);

@@ -38,7 +38,7 @@ flowchart LR
 
 - **CAdES** — CMS `SignedData`; T/LT/LTA via unsigned attributes; LTA ATS gaps documented in engineering matrix.
 - **XAdES** — XMLDSig + XAdES properties; packaging enveloped / enveloping / detached.
-- **PAdES** — PDF incremental update, `/SubFilter /ETSI.CAdES.detached`; optional visible widget; DSS for LT; DocTimeStamp for LTA.
+- **PAdES** — PDF incremental update, `/SubFilter /ETSI.CAdES.detached`; optional visible widget; additional signatures append rather than overwrite; DSS for LT; DocTimeStamp for LTA.
 - **ASiC** — container with inner CAdES (and related structures).
 
 Detailed gaps and configuration: [engineering signature profiles](engineering/signature-profiles.md).

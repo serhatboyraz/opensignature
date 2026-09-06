@@ -34,6 +34,7 @@ public sealed class PadesBaselineBSigner : IPadesBaselineBSigner
 {
     public const string SubFilter = "ETSI.CAdES.detached";
     public const int ContentsHexLength = PdfByteRangeHelper.DefaultContentsHexLength;
+    public const string SignatureFieldNamePrefix = "OpenSignature";
 
     public const int AdvancedProfileContentsHexLength = 65536;
 
@@ -70,7 +71,7 @@ public sealed class PadesBaselineBSigner : IPadesBaselineBSigner
             out var updateStart);
         var placeholder = PdfByteRangeHelper.FindContentsPlaceholder(prepared, hexLength, updateStart);
 
-        PdfByteRangeHelper.PatchByteRange(prepared, "/ByteRange", placeholder.ByteRange);
+        PdfByteRangeHelper.PatchByteRange(prepared, "/ByteRange", placeholder.ByteRange, updateStart);
 
         var digest = PdfByteRangeHelper.ComputeDigestOverByteRanges(
             prepared,
@@ -103,15 +104,40 @@ public sealed class PadesBaselineBSigner : IPadesBaselineBSigner
     /// <summary>
     /// Validates that a PAdES-signed PDF contains a CMS signature covering the ByteRange
     /// and that the CMS signature verifies cryptographically.
+    /// Every embedded CAdES signature is checked so earlier incremental signatures stay valid.
     /// </summary>
     public static void ValidateSignedPdf(byte[] signedPdf, bool verifySignatureOnly = true)
     {
         ArgumentNullException.ThrowIfNull(signedPdf);
 
-        var byteRange = PdfByteRangeHelper.ReadStoredByteRange(signedPdf);
-        var data = ExtractByteRangeBytes(signedPdf, byteRange);
-        var cms = PdfByteRangeHelper.ExtractCmsFromContents(signedPdf);
-        CmsSignatureHelper.ValidateSignedCms(cms, data, verifySignatureOnly);
+        var signatures = PdfByteRangeHelper.EnumerateCadesSignatures(signedPdf);
+        if (signatures.Count == 0)
+        {
+            throw new InvalidOperationException("PDF does not contain a PAdES CAdES signature dictionary.");
+        }
+
+        foreach (var signature in signatures)
+        {
+            var data = ExtractByteRangeBytes(signedPdf, signature.ByteRange);
+            CmsSignatureHelper.ValidateSignedCms(signature.Cms, data, verifySignatureOnly);
+        }
+    }
+
+    internal static string NextSignatureFieldName(IReadOnlyList<string> existingFieldNames)
+    {
+        var used = existingFieldNames.Count == 0
+            ? new HashSet<string>(StringComparer.Ordinal)
+            : new HashSet<string>(existingFieldNames, StringComparer.Ordinal);
+        for (var i = 1; i < 100_000; i++)
+        {
+            var name = string.Create(CultureInfo.InvariantCulture, $"{SignatureFieldNamePrefix}{i}");
+            if (!used.Contains(name))
+            {
+                return name;
+            }
+        }
+
+        throw new InvalidOperationException("Could not allocate a unique PAdES signature field name.");
     }
 
     /// <summary>Creates a minimal valid PDF for tests (single empty page).</summary>
@@ -170,6 +196,7 @@ public sealed class PadesBaselineBSigner : IPadesBaselineBSigner
         var pageNumber = appearance?.PageNumber ?? 1;
         var pageObjNum = visible ? structure.GetPageObjectNumber(pageNumber) : structure.FirstPageObjectNumber;
         var pageBox = visible ? structure.GetPageBox(pageObjNum) : new PdfRectangle(0, 0, 612, 792);
+        var fieldName = NextSignatureFieldName(structure.ExistingFieldNames);
 
         PdfImageXObject? image = null;
         if (visible && appearance!.ImageBytes is { Length: > 0 })
@@ -185,7 +212,8 @@ public sealed class PadesBaselineBSigner : IPadesBaselineBSigner
                 signerName,
                 signingTimeUtc,
                 appearance!.Note,
-                image);
+                image,
+                structure.GetVisibleAnnotationRects(pageObjNum));
         }
 
         var nextObj = structure.NextObjectNumber;
@@ -260,7 +288,7 @@ public sealed class PadesBaselineBSigner : IPadesBaselineBSigner
                 $"[{PdfLiteral.Number(rect.Llx)} {PdfLiteral.Number(rect.Lly)} {PdfLiteral.Number(rect.Urx)} {PdfLiteral.Number(rect.Ury)}]");
         }
 
-        WriteAscii(ms, $" /V {sigObjNum.ToString(CultureInfo.InvariantCulture)} 0 R /T (OpenSignature1) /P {pageObjNum.ToString(CultureInfo.InvariantCulture)} 0 R");
+        WriteAscii(ms, $" /V {sigObjNum.ToString(CultureInfo.InvariantCulture)} 0 R /T {PdfLiteral.String(fieldName)} /P {pageObjNum.ToString(CultureInfo.InvariantCulture)} 0 R");
         if (appearanceObjNum is int apObj)
         {
             WriteAscii(ms, $" /AP << /N {apObj.ToString(CultureInfo.InvariantCulture)} 0 R >>");

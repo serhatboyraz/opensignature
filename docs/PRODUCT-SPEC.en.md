@@ -485,11 +485,11 @@ MVP:
 - CMS signature container
 - required signing certificate material
 - optional visible appearance (implemented: PAdES stamp with note and/or JPEG/PNG).
+- additional signatures via incremental update (unique `OpenSignatureN` fields; visible stamps do not overlap existing widgets).
 
 Later:
 
 - signature field reuse
-- multiple signatures
 - VRI dictionary.
 
 Implemented (Phase 8): RFC 3161 signature timestamp (T), DSS with certificates/CRLs/OCSPs (LT), document timestamp `/SubFilter /ETSI.RFC3161` (LTA). Profiles never silently downgrade.

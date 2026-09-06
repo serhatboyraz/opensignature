@@ -38,7 +38,7 @@ flowchart LR
 
 - **CAdES** — CMS `SignedData`; T/LT/LTA unsigned öznitelikler.
 - **XAdES** — XMLDSig + XAdES özellikleri; enveloped / enveloping / detached.
-- **PAdES** — PDF artımlı güncelleme; isteğe bağlı görünür damga; LT için DSS; LTA için DocTimeStamp.
+- **PAdES** — PDF artımlı güncelleme; isteğe bağlı görünür damga; mevcut imzanın üzerine basmak yerine yeni imza eklenir; LT için DSS; LTA için DocTimeStamp.
 - **ASiC** — iç CAdES içeren konteyner.
 
 Ayrıntılı boşluklar: [mühendislik imza profilleri](engineering/signature-profiles.md).

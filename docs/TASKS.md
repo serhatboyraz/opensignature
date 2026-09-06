@@ -373,6 +373,26 @@
 - Commit:
   - `feat(signing): add PAdES visible signature appearance`
 
+### T055a — PAdES Additional Signatures
+- Status: `DONE`
+- Priority: P1
+- Depends on: T053, T055
+- Scope:
+  - Append a new PAdES signature when the PDF already contains one (incremental update).
+  - Do not patch or replace a previous signature dictionary (`/ByteRange`, `/Contents`, field).
+  - Unique AcroForm field names (`OpenSignatureN`).
+  - Visible widgets must not overlap existing page annotations.
+- Acceptance:
+  - Signing an already-signed PDF adds a new signature; previous CMS still validates.
+  - Field names are unique.
+  - Visible stamps stack instead of covering the previous widget.
+- Tests:
+  - two sequential invisible signatures
+  - two sequential visible signatures (non-overlapping rects)
+  - previous ByteRange preserved
+- Commit:
+  - `feat(signing): append additional PAdES signatures`
+
 ---
 
 ## Phase 6 — API

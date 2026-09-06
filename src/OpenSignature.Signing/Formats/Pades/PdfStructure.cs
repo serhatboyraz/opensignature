@@ -44,6 +44,8 @@ internal sealed class PdfStructure
 
     public IReadOnlyList<string> ExistingAcroFormFields { get; private set; } = [];
 
+    public IReadOnlyList<string> ExistingFieldNames { get; private set; } = [];
+
     public IReadOnlyDictionary<string, string> AcroFormEntries { get; private set; } =
         new Dictionary<string, string>(StringComparer.Ordinal);
 
@@ -100,6 +102,24 @@ internal sealed class PdfStructure
     {
         var dict = GetDictionary(pageObjectNumber);
         return ResolveReferenceArray(dict, "/Annots");
+    }
+
+    /// <summary>Non-zero widget rectangles on the page (existing visible signatures and other annots).</summary>
+    public IReadOnlyList<PdfRectangle> GetVisibleAnnotationRects(int pageObjectNumber)
+    {
+        var rects = new List<PdfRectangle>();
+        foreach (var annot in GetPageAnnotObjectNumbers(pageObjectNumber))
+        {
+            var dict = GetDictionary(annot);
+            if (!TryReadRectangle(dict, "/Rect", out var rect) || !rect.HasArea)
+            {
+                continue;
+            }
+
+            rects.Add(rect);
+        }
+
+        return rects;
     }
 
     public static PdfStructure Load(byte[] pdf)
@@ -204,6 +224,7 @@ internal sealed class PdfStructure
         var acroForm = ReadAcroForm(CatalogEntries);
         AcroFormEntries = acroForm.Entries;
         ExistingAcroFormFields = acroForm.Fields;
+        ExistingFieldNames = CollectFieldNames(acroForm.Fields);
     }
 
     private List<int> FlattenPageObjectNumbers()
@@ -336,6 +357,44 @@ internal sealed class PdfStructure
         var fields = ResolveReferenceArray(acro, "/Fields");
         var fieldRefs = fields.Select(static n => string.Create(CultureInfo.InvariantCulture, $"{n} 0 R")).ToList();
         return (acro, fieldRefs);
+    }
+
+    private List<string> CollectFieldNames(IReadOnlyList<string> fieldRefs)
+    {
+        var names = new List<string>();
+        var visited = new HashSet<int>();
+        foreach (var fieldRef in fieldRefs)
+        {
+            if (!PdfInput.TryParseReference(fieldRef, out var objectNumber, out _))
+            {
+                continue;
+            }
+
+            CollectFieldNamesFromObject(objectNumber, names, visited);
+        }
+
+        return names;
+    }
+
+    private void CollectFieldNamesFromObject(int objectNumber, List<string> names, HashSet<int> visited)
+    {
+        if (!visited.Add(objectNumber))
+        {
+            return;
+        }
+
+        var dict = GetDictionary(objectNumber);
+        if (dict.TryGetValue("/T", out var raw)
+            && PdfLiteral.TryDecodeString(raw, out var name)
+            && name.Length > 0)
+        {
+            names.Add(name);
+        }
+
+        foreach (var kid in ResolveReferenceArray(dict, "/Kids"))
+        {
+            CollectFieldNamesFromObject(kid, names, visited);
+        }
     }
 
     private List<int> ResolveReferenceArray(IReadOnlyDictionary<string, string> dictionary, string key)

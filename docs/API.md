@@ -85,7 +85,7 @@ Creates an asynchronous signing job. The API validates input, stores the file, p
 | `profile` | Yes | `B`, `T`, `LT`, `LTA` |
 | `signingProvider` | Yes | `Pfx`, `Pkcs11`, `SmartCard`, `Hsm` |
 | `certificateThumbprint` | No | Selects a certificate known to the provider (public metadata / thumbprint only) |
-| `visibleSignature` | No | `true` / `false`. PAdES only. Draws a visible stamp on the selected page. |
+| `visibleSignature` | No | `true` / `false`. PAdES only. Draws a visible stamp on the selected page. A later PAdES request on an already-signed PDF adds a new signature instead of overwriting the previous one; visible stamps are placed so they do not overlap. |
 | `signatureNote` | No | Optional text on the stamp and PDF `/Reason`. Max 500 characters. PAdES only. Implies visible when set. |
 | `signaturePage` | No | 1-based page number for the stamp (default `1`). PAdES only. |
 | `signatureImage` | No | Optional JPEG or PNG stamp image (max `Signatures:MaxAppearanceImageBytes`, default 2 MiB). Stored separately from the document; never sent on RabbitMQ. PAdES only. Implies visible when set. |

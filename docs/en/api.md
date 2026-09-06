@@ -68,7 +68,7 @@ flowchart TB
 
 ### POST `/api/v1/signatures`
 
-Multipart fields: `file`, `format`, `profile`, `signingProvider`, optional `certificateThumbprint`, PAdES appearance fields (`visibleSignature`, `signatureNote`, `signaturePage`, `signatureImage`).
+Multipart fields: `file`, `format`, `profile`, `signingProvider`, optional `certificateThumbprint`, PAdES appearance fields (`visibleSignature`, `signatureNote`, `signaturePage`, `signatureImage`). A later PAdES request on an already-signed PDF appends a new signature.
 
 Formats: `PAdES`, `XAdES`, `CAdES`, `ASiC_S`, `ASiC_E`  
 Profiles: `B`, `T`, `LT`, `LTA`  

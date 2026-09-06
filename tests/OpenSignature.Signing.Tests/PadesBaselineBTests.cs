@@ -1,6 +1,7 @@
 using System.Globalization;
 using System.Text;
 using OpenSignature.Signing.Contracts;
+using OpenSignature.Signing.Crypto;
 using OpenSignature.Signing.Formats.Pades;
 using OpenSignature.Signing.Pfx;
 
@@ -262,6 +263,7 @@ public sealed class PadesBaselineBTests
 
         var ascii = Encoding.ASCII.GetString(result.SignedPdf);
         Assert.Contains("/Rect [0 0 0 0]", ascii, StringComparison.Ordinal);
+        Assert.Contains("/T (OpenSignature1)", ascii, StringComparison.Ordinal);
         Assert.DoesNotContain("/Subtype /Form", ascii, StringComparison.Ordinal);
         PadesBaselineBSigner.ValidateSignedPdf(result.SignedPdf);
     }
@@ -344,11 +346,98 @@ public sealed class PadesBaselineBTests
     }
 
     [Fact]
+    public async Task Second_invisible_signature_appends_without_replacing_the_first()
+    {
+        using var material = CreateMaterial();
+        await using var provider = CreateProvider(material);
+        var selector = await DefaultSelectorAsync(provider);
+        var signer = new PadesBaselineBSigner();
+
+        var first = await signer.SignAsync(PadesBaselineBSigner.CreateMinimalPdf(), provider, selector);
+        var firstByteRange = PdfByteRangeHelper.ReadStoredByteRange(first.SignedPdf);
+        var firstFieldNames = PdfStructure.Load(first.SignedPdf).ExistingFieldNames;
+
+        var second = await signer.SignAsync(first.SignedPdf, provider, selector);
+        var ascii = Encoding.ASCII.GetString(second.SignedPdf);
+        var secondStructure = PdfStructure.Load(second.SignedPdf);
+        var signatures = PdfByteRangeHelper.EnumerateCadesSignatures(second.SignedPdf);
+
+        Assert.True(second.SignedPdf.Length > first.SignedPdf.Length);
+        Assert.Equal(2, signatures.Count);
+        Assert.Equal(["OpenSignature1"], firstFieldNames);
+        Assert.Equal(["OpenSignature1", "OpenSignature2"], secondStructure.ExistingFieldNames);
+        Assert.Contains(FormatPaddedByteRange(firstByteRange), ascii, StringComparison.Ordinal);
+        Assert.Equal(firstByteRange, signatures[0].ByteRange);
+        PadesBaselineBSigner.ValidateSignedPdf(first.SignedPdf);
+        PadesBaselineBSigner.ValidateSignedPdf(second.SignedPdf);
+    }
+
+    [Fact]
+    public async Task Second_visible_signature_does_not_cover_the_first_stamp()
+    {
+        using var material = CreateMaterial();
+        await using var provider = CreateProvider(material);
+        var selector = await DefaultSelectorAsync(provider);
+        var signer = new PadesBaselineBSigner();
+        var appearance = new PadesVisibleAppearance("First", ImageBytes: null, ImageContentType: null, PageNumber: 1);
+
+        var first = await signer.SignAsync(
+            PadesBaselineBSigner.CreateMinimalPdf(),
+            provider,
+            selector,
+            appearance: appearance);
+        var firstRects = PdfStructure.Load(first.SignedPdf)
+            .GetVisibleAnnotationRects(PdfStructure.Load(first.SignedPdf).FirstPageObjectNumber);
+
+        var second = await signer.SignAsync(
+            first.SignedPdf,
+            provider,
+            selector,
+            appearance: new PadesVisibleAppearance("Second", ImageBytes: null, ImageContentType: null, PageNumber: 1));
+        var secondStructure = PdfStructure.Load(second.SignedPdf);
+        var rects = secondStructure.GetVisibleAnnotationRects(secondStructure.FirstPageObjectNumber);
+
+        Assert.Single(firstRects);
+        Assert.Equal(2, rects.Count);
+        Assert.Equal(["OpenSignature1", "OpenSignature2"], secondStructure.ExistingFieldNames);
+        Assert.False(rects[0].Overlaps(rects[1]));
+        Assert.Contains("First", Encoding.ASCII.GetString(second.SignedPdf), StringComparison.Ordinal);
+        Assert.Contains("Second", Encoding.ASCII.GetString(second.SignedPdf), StringComparison.Ordinal);
+        PadesBaselineBSigner.ValidateSignedPdf(second.SignedPdf);
+    }
+
+    [Fact]
+    public void Next_signature_field_name_skips_existing_open_signature_fields()
+    {
+        Assert.Equal("OpenSignature1", PadesBaselineBSigner.NextSignatureFieldName([]));
+        Assert.Equal("OpenSignature2", PadesBaselineBSigner.NextSignatureFieldName(["OpenSignature1"]));
+        Assert.Equal("OpenSignature3", PadesBaselineBSigner.NextSignatureFieldName(["OpenSignature1", "OpenSignature2"]));
+        Assert.Equal("OpenSignature1", PadesBaselineBSigner.NextSignatureFieldName(["OtherField"]));
+    }
+
+    [Fact]
+    public void Visible_appearance_stacks_above_an_occupied_bottom_right_stamp()
+    {
+        var page = new PdfRectangle(0, 0, 612, 792);
+        var first = PadesAppearanceBuilder.Build(page, "Alice", DateTimeOffset.UnixEpoch, null, null);
+        var second = PadesAppearanceBuilder.Build(page, "Bob", DateTimeOffset.UnixEpoch, null, null, [first.Rect]);
+
+        Assert.False(first.Rect.Overlaps(second.Rect));
+        Assert.True(second.Rect.Lly > first.Rect.Ury);
+        Assert.Equal(first.Rect.Llx, second.Rect.Llx, 3);
+    }
+
+    [Fact]
     public void Common_name_is_parsed_from_subject()
     {
         Assert.Equal("Alice Example", PdfLiteral.CommonNameFromSubject("CN=Alice Example, O=OpenSignature"));
         Assert.Equal("Unknown signer", PdfLiteral.CommonNameFromSubject(" "));
     }
+
+    private static string FormatPaddedByteRange(IReadOnlyList<int> byteRange) =>
+        string.Create(
+            CultureInfo.InvariantCulture,
+            $"[{byteRange[0]:D10} {byteRange[1]:D10} {byteRange[2]:D10} {byteRange[3]:D10}]");
 
     private static byte[] TinyJpeg() =>
     [

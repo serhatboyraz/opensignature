@@ -66,7 +66,7 @@ flowchart TB
 
 ### POST `/api/v1/signatures`
 
-Çok parçalı alanlar: `file`, `format`, `profile`, `signingProvider`, isteğe bağlı `certificateThumbprint`, PAdES görünüm alanları.
+Çok parçalı alanlar: `file`, `format`, `profile`, `signingProvider`, isteğe bağlı `certificateThumbprint`, PAdES görünüm alanları. Daha önce imzalanmış bir PDF için yeni PAdES isteği önceki imzanın üzerine basmaz, yeni bir imza ekler.
 
 Biçimler: `PAdES`, `XAdES`, `CAdES`, `ASiC_S`, `ASiC_E`  
 Profiller: `B`, `T`, `LT`, `LTA`  

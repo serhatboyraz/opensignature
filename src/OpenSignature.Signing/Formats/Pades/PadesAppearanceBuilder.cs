@@ -9,17 +9,19 @@ internal static class PadesAppearanceBuilder
     public const double DefaultWidth = 180;
     public const double DefaultHeight = 54;
     public const double Margin = 36;
+    public const double Gap = 8;
 
     public static PadesAppearanceResources Build(
         PdfRectangle pageBox,
         string signerName,
         DateTimeOffset signingTimeUtc,
         string? note,
-        PdfImageXObject? image)
+        PdfImageXObject? image,
+        IReadOnlyList<PdfRectangle>? occupiedRects = null)
     {
         var width = DefaultWidth;
         var height = image is null ? DefaultHeight : 72;
-        var rect = PlaceBottomRight(pageBox, width, height);
+        var rect = PlaceWithoutOverlap(pageBox, width, height, occupiedRects);
 
         var lines = new List<string>
         {
@@ -72,6 +74,66 @@ internal static class PadesAppearanceBuilder
             BBoxHeight: height,
             ContentStream: Encoding.ASCII.GetBytes(content.ToString()),
             Image: image);
+    }
+
+    private static PdfRectangle PlaceWithoutOverlap(
+        PdfRectangle page,
+        double width,
+        double height,
+        IReadOnlyList<PdfRectangle>? occupiedRects)
+    {
+        var maxWidth = Math.Max(24, page.Width - (Margin * 2));
+        var maxHeight = Math.Max(16, page.Height - (Margin * 2));
+        width = Math.Min(width, maxWidth);
+        height = Math.Min(height, maxHeight);
+
+        var occupied = occupiedRects ?? [];
+        var stepX = width + Gap;
+        var stepY = height + Gap;
+        var columns = Math.Max(1, (int)Math.Floor((page.Width - (Margin * 2) + Gap) / stepX));
+        var rows = Math.Max(1, (int)Math.Floor((page.Height - (Margin * 2) + Gap) / stepY));
+
+        for (var column = 0; column < columns; column++)
+        {
+            for (var row = 0; row < rows; row++)
+            {
+                var urx = page.Urx - Margin - (column * stepX);
+                var llx = urx - width;
+                var lly = page.Lly + Margin + (row * stepY);
+                var ury = lly + height;
+                if (llx < page.Llx + Margin || ury > page.Ury - Margin)
+                {
+                    continue;
+                }
+
+                var candidate = new PdfRectangle(llx, lly, urx, ury);
+                if (!OverlapsAny(candidate, occupied))
+                {
+                    return candidate;
+                }
+            }
+        }
+
+        return PlaceBottomRight(page, width, height);
+    }
+
+    private static bool OverlapsAny(PdfRectangle candidate, IReadOnlyList<PdfRectangle> occupied)
+    {
+        var inflated = candidate.Inflate(Gap);
+        foreach (var existing in occupied)
+        {
+            if (!existing.HasArea)
+            {
+                continue;
+            }
+
+            if (inflated.Overlaps(existing))
+            {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     private static PdfRectangle PlaceBottomRight(PdfRectangle page, double width, double height)

@@ -47,6 +47,85 @@ internal static class PdfLiteral
         return builder.ToString();
     }
 
+    public static bool TryDecodeString(string raw, out string value)
+    {
+        value = string.Empty;
+        if (string.IsNullOrWhiteSpace(raw))
+        {
+            return false;
+        }
+
+        raw = raw.Trim();
+        if (raw.Length < 2 || raw[0] != '(' || raw[^1] != ')')
+        {
+            return false;
+        }
+
+        var inner = raw[1..^1];
+        var builder = new StringBuilder(inner.Length);
+        for (var i = 0; i < inner.Length; i++)
+        {
+            var ch = inner[i];
+            if (ch != '\\')
+            {
+                builder.Append(ch);
+                continue;
+            }
+
+            if (i + 1 >= inner.Length)
+            {
+                break;
+            }
+
+            var next = inner[++i];
+            switch (next)
+            {
+                case 'n':
+                    builder.Append('\n');
+                    break;
+                case 'r':
+                    builder.Append('\r');
+                    break;
+                case 't':
+                    builder.Append('\t');
+                    break;
+                case 'b':
+                    builder.Append('\b');
+                    break;
+                case 'f':
+                    builder.Append('\f');
+                    break;
+                case '(':
+                case ')':
+                case '\\':
+                    builder.Append(next);
+                    break;
+                default:
+                    if (next is >= '0' and <= '7')
+                    {
+                        var octal = next - '0';
+                        var digits = 1;
+                        while (digits < 3 && i + 1 < inner.Length && inner[i + 1] is >= '0' and <= '7')
+                        {
+                            octal = (octal * 8) + (inner[++i] - '0');
+                            digits++;
+                        }
+
+                        builder.Append((char)octal);
+                    }
+                    else
+                    {
+                        builder.Append(next);
+                    }
+
+                    break;
+            }
+        }
+
+        value = builder.ToString();
+        return true;
+    }
+
     public static string Number(double value) =>
         value.ToString("0.###", CultureInfo.InvariantCulture);
 
