@@ -1,0 +1,188 @@
+# OpenSignature documentation site (English + Türkçe)
+site_name: OpenSignature
+site_description: Independent .NET digital-signature platform — architecture, API, security, and operations
+site_url: https://opensignature.local/
+repo_url: https://github.com/opensignature/opensignature
+repo_name: OpenSignature
+docs_dir: docs
+site_dir: site
+edit_uri: ""
+
+# Engineering source-of-truth files stay at docs/ root for agents/repo workflows.
+# They are pulled into bilingual pages via pymdownx.snippets and hidden from nav.
+not_in_nav: |
+  /API.md
+  /ARCHITECTURE.md
+  /OPERATIONS.md
+  /PRODUCT-SPEC.en.md
+  /PRODUCT-SPEC.tr.md
+  /SECURITY.md
+  /SIGNATURE-PROFILES.md
+  /TASKS.md
+  /TEST-STRATEGY.md
+
+copyright: Copyright &copy; OpenSignature contributors
+
+theme:
+  name: material
+  language: en
+  palette:
+    - media: "(prefers-color-scheme: light)"
+      scheme: default
+      primary: teal
+      accent: teal
+      toggle:
+        icon: material/brightness-7
+        name: Switch to dark mode
+    - media: "(prefers-color-scheme: dark)"
+      scheme: slate
+      primary: teal
+      accent: teal
+      toggle:
+        icon: material/brightness-4
+        name: Switch to light mode
+  font:
+    text: Source Sans 3
+    code: JetBrains Mono
+  features:
+    - navigation.tabs
+    - navigation.sections
+    - navigation.expand
+    - navigation.top
+    - navigation.indexes
+    - search.suggest
+    - search.highlight
+    - content.code.copy
+    - content.tabs.link
+    - toc.follow
+  icon:
+    logo: material/draw-pen
+    repo: fontawesome/brands/github
+
+extra_css:
+  - stylesheets/extra.css
+
+extra:
+  alternate:
+    - name: English
+      link: /
+      lang: en
+    - name: Türkçe
+      link: /tr/
+      lang: tr
+  social:
+    - icon: fontawesome/brands/github
+      link: https://github.com/opensignature/opensignature
+
+markdown_extensions:
+  - admonition
+  - attr_list
+  - def_list
+  - md_in_html
+  - tables
+  - toc:
+      permalink: true
+  - pymdownx.details
+  - pymdownx.superfences:
+      custom_fences:
+        - name: mermaid
+          class: mermaid
+          format: !!python/name:pymdownx.superfences.fence_code_format
+  - pymdownx.highlight:
+      anchor_linenums: true
+  - pymdownx.inlinehilite
+  - pymdownx.snippets:
+      base_path:
+        - docs
+      check_paths: true
+      restrict_base_path: true
+  - pymdownx.tabbed:
+      alternate_style: true
+  - pymdownx.emoji:
+      emoji_index: !!python/name:material.extensions.emoji.twemoji
+      emoji_generator: !!python/name:material.extensions.emoji.to_svg
+
+plugins:
+  - search:
+      lang:
+        - en
+        - tr
+  - i18n:
+      docs_structure: folder
+      fallback_to_default: true
+      reconfigure_material: true
+      languages:
+        - locale: en
+          default: true
+          name: English
+          build: true
+          nav_translations:
+            Home: Home
+            Getting started: Getting started
+            Architecture: Architecture
+            Flows: Flows & diagrams
+            API: REST API
+            Security: Security
+            Operations: Operations
+            Signature profiles: Signature profiles
+            Testing: Testing
+            Product specification: Product specification
+            Engineering references: Engineering references
+        - locale: tr
+          name: Türkçe
+          build: true
+          nav:
+            - Ana sayfa: index.md
+            - Başlangıç: getting-started.md
+            - Mimari: architecture.md
+            - Akışlar ve diyagramlar: flows.md
+            - REST API: api.md
+            - Güvenlik: security.md
+            - Operasyon: operations.md
+            - İmza profilleri: signature-profiles.md
+            - Test stratejisi: testing.md
+            - Ürün spesifikasyonu: product-spec.md
+            - Mühendislik referansları:
+                - Görevler (TASKS): engineering/tasks.md
+                - Mimari (kaynak): engineering/architecture.md
+                - API (kaynak): engineering/api.md
+                - Güvenlik (kaynak): engineering/security.md
+                - Operasyon (kaynak): engineering/operations.md
+                - İmza profilleri (kaynak): engineering/signature-profiles.md
+                - Test stratejisi (kaynak): engineering/test-strategy.md
+          nav_translations:
+            Home: Ana sayfa
+            Getting started: Başlangıç
+            Architecture: Mimari
+            Flows: Akışlar ve diyagramlar
+            API: REST API
+            Security: Güvenlik
+            Operations: Operasyon
+            Signature profiles: İmza profilleri
+            Testing: Test stratejisi
+            Product specification: Ürün spesifikasyonu
+            Engineering references: Mühendislik referansları
+
+nav:
+  - Home: index.md
+  - Getting started: getting-started.md
+  - Architecture: architecture.md
+  - Flows: flows.md
+  - API: api.md
+  - Security: security.md
+  - Operations: operations.md
+  - Signature profiles: signature-profiles.md
+  - Testing: testing.md
+  - Product specification: product-spec.md
+  - Engineering references:
+      - Tasks (TASKS): engineering/tasks.md
+      - Architecture (source): engineering/architecture.md
+      - API (source): engineering/api.md
+      - Security (source): engineering/security.md
+      - Operations (source): engineering/operations.md
+      - Signature profiles (source): engineering/signature-profiles.md
+      - Test strategy (source): engineering/test-strategy.md
+
+watch:
+  - docs
+  - mkdocs.yaml

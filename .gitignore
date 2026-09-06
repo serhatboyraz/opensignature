@@ -53,5 +53,8 @@ temp/
 logs/
 *.log
 
+## Docs site build output
+site/
+
 ## Docker
 docker-compose.override.yml

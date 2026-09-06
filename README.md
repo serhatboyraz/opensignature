@@ -2,23 +2,74 @@
 
 Independent .NET digital-signature platform with asynchronous signing, PostgreSQL metadata, RabbitMQ workers, and a React administration UI.
 
-## Documentation
+Bağımsız .NET dijital imza platformu: asenkron imzalama, PostgreSQL meta veri, RabbitMQ işçileri ve React yönetim arayüzü.
 
-- [Product specification (EN)](docs/PRODUCT-SPEC.en.md)
-- [Product specification (TR)](docs/PRODUCT-SPEC.tr.md)
-- [Task checklist](docs/TASKS.md)
-- [Architecture](docs/ARCHITECTURE.md)
-- [Signature profiles](docs/SIGNATURE-PROFILES.md)
+---
 
-All source code, identifiers, logs, tests and commit messages are English-only.
+## Architecture / Mimari
 
-## Prerequisites
+![OpenSignature architecture](docs/assets/images/architecture-diagram.svg)
+
+![System overview](docs/assets/images/architecture-overview.png)
+
+```mermaid
+flowchart LR
+  Client -->|POST /signatures| Api
+  Api -->|input + outbox| PG[(PostgreSQL)]
+  Api --> FS[(File storage)]
+  Api -->|job refs| MQ[[RabbitMQ]]
+  MQ --> Worker
+  Worker --> Signing[ISigningProvider]
+  Worker --> FS
+  Client -->|GET status / content| Api
+```
+
+| EN | TR |
+| --- | --- |
+| API validates, stores the file, writes an outbox row, returns `202 Accepted` | API doğrular, dosyayı kaydeder, outbox yazar, `202 Accepted` döner |
+| Worker consumes a small RabbitMQ message (never document binaries) | Worker küçük RabbitMQ mesajını tüketir (belge ikilisi yok) |
+| Hardware providers sign digests on-device; private keys are never exported | Donanım sağlayıcıları özeti cihazda imzalar; özel anahtar dışa aktarılmaz |
+
+Async pipeline:
+
+![Async signing flow](docs/assets/images/async-flow-diagram.svg)
+
+---
+
+## Documentation / Dokümantasyon
+
+| English | Türkçe |
+| --- | --- |
+| [MkDocs site (EN)](docs/en/index.md) | [MkDocs sitesi (TR)](docs/tr/index.md) |
+| [Product specification](docs/PRODUCT-SPEC.en.md) | [Ürün spesifikasyonu](docs/PRODUCT-SPEC.tr.md) |
+| [Architecture](docs/en/architecture.md) | [Mimari](docs/tr/architecture.md) |
+| [Flows & diagrams](docs/en/flows.md) | [Akışlar ve diyagramlar](docs/tr/flows.md) |
+| [REST API](docs/en/api.md) | [REST API](docs/tr/api.md) |
+| [Security](docs/en/security.md) | [Güvenlik](docs/tr/security.md) |
+| [Operations](docs/en/operations.md) | [Operasyon](docs/tr/operations.md) |
+| [Task checklist](docs/TASKS.md) | [Görev listesi](docs/TASKS.md) |
+
+Build the bilingual docs site:
+
+```bash
+pip install -r requirements-docs.txt
+mkdocs serve
+```
+
+Open http://127.0.0.1:8000 and use the language switcher (**English** / **Türkçe**). Config: [`mkdocs.yaml`](mkdocs.yaml).
+
+All source code, identifiers, logs, tests and commit messages are English-only.  
+Kaynak kodu, tanımlayıcılar, loglar, testler ve commit mesajları yalnızca İngilizcedir.
+
+---
+
+## Prerequisites / Önkoşullar
 
 - .NET 10 SDK
 - Node.js 20+
 - Docker (PostgreSQL + RabbitMQ)
 
-## Local infrastructure
+## Local infrastructure / Yerel altyapı
 
 ```bash
 cp .env.example .env
@@ -28,7 +79,7 @@ docker compose ps
 
 Defaults: Postgres `localhost:5432` (`esign`/`esign`/`opensignature`), RabbitMQ `5672` + management UI `15672`. If host port `5432` is busy, set `POSTGRES_PORT=5433` in `.env` and match `ConnectionStrings:PostgreSQL` in the Api/Worker Development settings.
 
-## Start development apps
+## Start development apps / Geliştirmeyi başlatma
 
 One command starts Docker dependencies, the API, the signing worker, and the React UI:
 
@@ -45,7 +96,7 @@ Press Ctrl+C in that terminal to stop the API, worker, and web processes. Contai
 
 Optional flags: `-SkipInfrastructure`, `-SkipCertificate`, `-ApiProfile https`.
 
-## Working POC (async signing)
+## Working POC (async signing) / Çalışan POC
 
 ```bash
 # 1) Dependencies
@@ -94,25 +145,28 @@ curl -s -X POST "http://localhost:5270/api/v1/verifications" \
 
 Supported MVP formats: **CAdES-B**, **XAdES-B**, **PAdES-B** via the development PFX provider. Sample inputs live under `samples/`.
 
-USB tokens appear on the Providers page (`/providers`) when vendor PKCS#11 middleware is installed. Development auto-detects well-known libraries (`Signing:SmartCard:AutoDetect`). Expired token certificates can sign in Development via `Signing:AllowExpiredCertificates` (keep this `false` in production). See [Operations](docs/OPERATIONS.md).
+USB tokens appear on the Providers page (`/providers`) when vendor PKCS#11 middleware is installed. Development auto-detects well-known libraries (`Signing:SmartCard:AutoDetect`). Expired token certificates can sign in Development via `Signing:AllowExpiredCertificates` (keep this `false` in production). See [Operations](docs/OPERATIONS.md) / [Operasyon](docs/tr/operations.md).
 
-## Tests
+## Tests / Testler
 
 ```bash
 dotnet test OpenSignature.slnx
 ```
 
-## Repository layout
+## Repository layout / Depo düzeni
 
 ```text
-src/OpenSignature.Api|Application|Domain|Infrastructure|Signing|Signing.Contracts|Worker|Web
+src/OpenSignature.Api|Application|Domain|Infrastructure|Signing|Signing.Contracts|Validation|Worker|Web
 tests/
-docs/
+docs/                 # engineering sources + MkDocs (en/, tr/, assets/)
+mkdocs.yaml
 scripts/Start-Development.ps1
 scripts/Generate-DevCertificate.ps1
 samples/
 ```
 
-## Status
+## Status / Durum
 
 POC path is operational: API → storage → PostgreSQL → outbox → RabbitMQ → worker → signing engine → download. USB-token PKCS#11 providers are registered from configuration (auto-detect in Development). Further work continues via `docs/TASKS.md`.
+
+POC yolu çalışır durumda: API → depolama → PostgreSQL → outbox → RabbitMQ → işçi → imza motoru → indirme. USB-token PKCS#11 sağlayıcıları yapılandırmadan kaydedilir (Development’ta otomatik algılama). Sonraki işler `docs/TASKS.md` üzerinden sürer.
