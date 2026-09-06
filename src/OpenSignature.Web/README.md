@@ -18,7 +18,7 @@ React administration/demo UI for **OpenSignature**.
 | `/signatures/:id` | Status detail, cancel, download when completed |
 | `/certificates` | Public certificate inventory |
 | `/providers` | Providers + per-provider health |
-| `/jobs`, `/audit`, `/settings` | Stubs / placeholders |
+| `/jobs`, `/audit`, `/settings` | Stubs (not shown in the header) |
 
 ## Run locally
 

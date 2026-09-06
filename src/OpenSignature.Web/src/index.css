@@ -64,8 +64,11 @@ code,
 
 .app-frame {
   max-width: 1100px;
+  min-height: 100vh;
   margin: 0 auto;
-  padding: 2.5rem 1.5rem 4rem;
+  padding: 2.5rem 1.5rem 2rem;
+  display: flex;
+  flex-direction: column;
 }
 
 .app-header {
@@ -97,8 +100,7 @@ code,
   max-width: 34rem;
 }
 
-.primary-nav,
-.secondary-nav {
+.primary-nav {
   display: flex;
   flex-wrap: wrap;
   gap: 0.35rem 1rem;
@@ -121,21 +123,31 @@ code,
   border-bottom-color: var(--accent);
 }
 
-.nav-link.muted {
-  color: var(--muted);
-  font-weight: 400;
-  font-size: 0.92rem;
-}
-
-.env-meta {
-  margin: 0;
-  color: var(--muted);
-  font-size: 0.82rem;
-  font-family: var(--font-mono);
-}
-
 .app-main {
+  flex: 1;
   animation: rise 420ms ease-out;
+}
+
+.app-footer {
+  margin-top: 2.5rem;
+  padding-top: 1.25rem;
+  border-top: 1px solid var(--line);
+}
+
+.footer-nav {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem 1.25rem;
+}
+
+.footer-nav a {
+  color: var(--muted);
+  font-size: 0.88rem;
+  text-decoration: none;
+}
+
+.footer-nav a:hover {
+  color: var(--accent-deep);
 }
 
 @keyframes rise {

@@ -1,5 +1,7 @@
 import { NavLink, Outlet } from 'react-router-dom'
-import { getApiBaseUrl, getTenantId } from '../lib/config'
+
+const GITHUB_URL = 'https://github.com/serhatboyraz/opensignature'
+const DOCS_URL = 'https://github.com/serhatboyraz/opensignature/tree/main/docs'
 
 const primaryNav = [
   { to: '/dashboard', label: 'Dashboard' },
@@ -9,16 +11,7 @@ const primaryNav = [
   { to: '/verify', label: 'Verify' },
 ]
 
-const secondaryNav = [
-  { to: '/jobs', label: 'Jobs' },
-  { to: '/audit', label: 'Audit' },
-  { to: '/settings', label: 'Settings' },
-]
-
 export function Layout() {
-  const apiBase = getApiBaseUrl() || '(Vite proxy)'
-  const tenantId = getTenantId() ?? 'default'
-
   return (
     <div className="app-frame">
       <header className="app-header">
@@ -37,24 +30,20 @@ export function Layout() {
             </NavLink>
           ))}
         </nav>
-        <nav className="secondary-nav" aria-label="Secondary">
-          {secondaryNav.map((item) => (
-            <NavLink
-              key={item.to}
-              to={item.to}
-              className={({ isActive }) => (isActive ? 'nav-link muted active' : 'nav-link muted')}
-            >
-              {item.label}
-            </NavLink>
-          ))}
-        </nav>
-        <p className="env-meta">
-          API {apiBase} · tenant {tenantId}
-        </p>
       </header>
       <main className="app-main">
         <Outlet />
       </main>
+      <footer className="app-footer">
+        <nav className="footer-nav" aria-label="Project">
+          <a href={GITHUB_URL} target="_blank" rel="noreferrer">
+            github.com/serhatboyraz/opensignature
+          </a>
+          <a href={DOCS_URL} target="_blank" rel="noreferrer">
+            Documentation
+          </a>
+        </nav>
+      </footer>
     </div>
   )
 }
