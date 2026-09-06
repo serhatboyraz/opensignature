@@ -1,0 +1,2 @@
+# Keep container entrypoints executable with LF line endings on Windows checkouts.
+docker/scripts/*.sh text eol=lf
