@@ -227,7 +227,7 @@ public sealed class SignatureSigningJobProcessor : ISigningJobProcessor
 
             var outputFile = StoredFile.Create(
                 storageKey: outputKey,
-                originalFileName: "signed.bin",
+                originalFileName: SignedOutputFileName(request.Format),
                 contentType: contentType,
                 size: metadata.Size,
                 sha256: metadata.Sha256);
@@ -272,4 +272,14 @@ public sealed class SignatureSigningJobProcessor : ISigningJobProcessor
 
         await _db.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
     }
+
+    private static string SignedOutputFileName(SignatureFormat format) => format switch
+    {
+        SignatureFormat.PAdES => "signed.pdf",
+        SignatureFormat.XAdES => "signed.xml",
+        SignatureFormat.CAdES => "signed.p7m",
+        SignatureFormat.ASiC_S => "signed.asics",
+        SignatureFormat.ASiC_E => "signed.asice",
+        _ => "signed.bin"
+    };
 }

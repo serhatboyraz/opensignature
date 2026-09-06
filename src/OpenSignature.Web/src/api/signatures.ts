@@ -53,8 +53,16 @@ export async function downloadSignatureContent(id: string): Promise<{
 }> {
   const response = await apiFetch(`/api/v1/signatures/${id}/content`)
   const disposition = response.headers.get('Content-Disposition')
-  const fileName = parseFileName(disposition) ?? `signature-${id}.bin`
+  const contentType = response.headers.get('Content-Type')
+  const fromHeader = parseFileName(disposition)
   const blob = await response.blob()
+  if (blob.size === 0) {
+    throw new Error('Download returned an empty file (0 bytes).')
+  }
+
+  const fileName =
+    preferExtension(fromHeader, contentType) ??
+    `signature-${id}${extensionForContentType(contentType)}`
   return { blob, fileName }
 }
 
@@ -70,4 +78,41 @@ function parseFileName(disposition: string | null): string | undefined {
 
   const plainMatch = /filename="?([^";]+)"?/i.exec(disposition)
   return plainMatch?.[1]
+}
+
+function extensionForContentType(contentType: string | null): string {
+  const mime = (contentType ?? '').split(';')[0]?.trim().toLowerCase()
+  switch (mime) {
+    case 'application/pdf':
+      return '.pdf'
+    case 'application/xml':
+    case 'text/xml':
+      return '.xml'
+    case 'application/pkcs7-mime':
+    case 'application/pkcs7-signature':
+      return '.p7m'
+    default:
+      return '.bin'
+  }
+}
+
+/** When the API still uses a generic signed.bin name, align the extension with Content-Type. */
+function preferExtension(
+  fileName: string | undefined,
+  contentType: string | null,
+): string | undefined {
+  if (!fileName) {
+    return undefined
+  }
+
+  const preferred = extensionForContentType(contentType)
+  if (preferred === '.bin') {
+    return fileName
+  }
+
+  if (/\.bin$/i.test(fileName) || !/\.[a-z0-9]+$/i.test(fileName)) {
+    return fileName.replace(/(\.bin)?$/i, preferred)
+  }
+
+  return fileName
 }

@@ -32,12 +32,17 @@ export function SignatureDetailPage() {
   const downloadMutation = useMutation({
     mutationFn: () => downloadSignatureContent(id),
     onSuccess: ({ blob, fileName }) => {
+      // Do not revoke immediately after click — the browser reads the blob
+      // asynchronously; early revoke yields empty (0 KB) downloads.
       const url = URL.createObjectURL(blob)
       const anchor = document.createElement('a')
       anchor.href = url
       anchor.download = fileName
+      anchor.rel = 'noopener'
+      document.body.appendChild(anchor)
       anchor.click()
-      URL.revokeObjectURL(url)
+      anchor.remove()
+      window.setTimeout(() => URL.revokeObjectURL(url), 60_000)
     },
   })
 

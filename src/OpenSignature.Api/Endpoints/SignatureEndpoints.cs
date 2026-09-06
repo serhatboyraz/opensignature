@@ -293,8 +293,10 @@ public static class SignatureEndpoints
         {
             SignatureContentResult.Success success => Results.File(
                 success.Content,
-                success.ContentType,
-                success.FileName,
+                string.IsNullOrWhiteSpace(success.ContentType)
+                    ? "application/octet-stream"
+                    : success.ContentType,
+                fileDownloadName: success.FileName,
                 enableRangeProcessing: false),
             SignatureContentResult.NotFound => Problem(
                 statusCode: StatusCodes.Status404NotFound,
