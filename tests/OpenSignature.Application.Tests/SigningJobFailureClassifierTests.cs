@@ -36,6 +36,8 @@ public sealed class SigningJobFailureClassifierTests
     [InlineData("Certificate does not contain a private key.")]
     [InlineData("Unsupported signature format.")]
     [InlineData("Failed to deserialize signing job message.")]
+    [InlineData("Expected 'obj' at offset 300.")]
+    [InlineData("Input is not a PDF document.")]
     public void Classify_treats_cryptographic_invalid_operation_as_permanent(string message)
     {
         var exception = new InvalidOperationException(message);

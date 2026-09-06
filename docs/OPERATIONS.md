@@ -72,6 +72,8 @@ Workers acquire an idempotent processing lock before signing (`ISigningJobLockSe
 
 - Only one consumer may hold the lock for a given `SigningJob`.
 - Duplicate RabbitMQ deliveries or concurrent workers that lose the lock race ACK without signing again.
+- After a retryable signing failure, the worker releases the lock and sets the request to `RetryScheduled` before the bounded retry is published. Leaving `Processing` with an unexpired `LockedUntil` would ACK the retry and strand the job.
+- Permanent failures (bad payload, cryptographic errors, unreadable PDF structure) mark the job and request `Failed` and go to the DLQ without further retry.
 - After a worker crash/restart, `Locked` or `Processing` jobs whose `LockedUntil` is in the past (or unset) may be reclaimed; non-expired locks are not stolen.
 - Default lock lease is 15 minutes (must exceed expected signing duration).
 

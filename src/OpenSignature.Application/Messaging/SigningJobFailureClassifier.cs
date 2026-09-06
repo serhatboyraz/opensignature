@@ -63,7 +63,12 @@ public static class SigningJobFailureClassifier
                 "deserialize",
                 "not found for the provided selector",
                 "does not contain a private key",
-                "unsupported"))
+                "unsupported",
+                "expected 'obj'",
+                "pdf object",
+                "is not a pdf",
+                "xref stream",
+                "xref table"))
         {
             return SigningJobFailureKind.Permanent;
         }

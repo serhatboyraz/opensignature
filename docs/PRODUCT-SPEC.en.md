@@ -490,10 +490,9 @@ Later:
 
 - signature field reuse
 - multiple signatures
-- timestamp
-- LT/LTA
-- DSS/VRI validation data
-- archival timestamp.
+- VRI dictionary.
+
+Implemented (Phase 8): RFC 3161 signature timestamp (T), DSS with certificates/CRLs/OCSPs (LT), document timestamp `/SubFilter /ETSI.RFC3161` (LTA). Profiles never silently downgrade.
 
 ## 16. XAdES
 
@@ -508,13 +507,10 @@ MVP:
 
 Later:
 
-- T
-- LT
-- LTA
 - multiple signatures
-- signature policy
-- timestamps
-- OCSP/CRL evidence.
+- signature policy.
+
+Implemented (Phase 8): T (`SignatureTimeStamp`), LT (`CertificateValues` / `RevocationValues`), LTA (`ArchiveTimeStamp`). Profiles never silently downgrade.
 
 ## 17. CAdES
 
@@ -527,24 +523,21 @@ MVP:
 
 Later:
 
-- T
-- LT
-- LTA
-- signature policy
-- validation data
-- archival timestamp.
+- signature policy.
+
+Implemented (Phase 8): T (signature timestamp token), LT (certificate/revocation values), LTA (archive timestamp). Profiles never silently downgrade.
 
 ## 18. ASiC
 
 ASiC-S:
 
-- one associated signature/data package.
+- one associated signature/data package (ZIP, uncompressed `mimetype` first, detached CAdES in `META-INF/signature.p7s`).
 
 ASiC-E:
 
-- multiple data objects and signatures.
+- multiple data objects and signatures (`ASiCManifest.xml` plus CAdES over the manifest).
 
-Use ZIP-based containers and validate package relationships.
+Use ZIP-based containers and validate package relationships. T/LT/LTA apply to the inner CAdES.
 
 ## 19. Timestamp Authority
 
@@ -564,6 +557,8 @@ Implement RFC 3161 with:
 - message imprint
 - timestamp token
 - certificate validation.
+
+Worker default: no TSA until `Timestamping:Url` is configured. Tests may use an in-process RFC 3161 TSA whose private key is never exported.
 
 A requested T/LT/LTA profile must never silently downgrade to B when timestamping fails.
 

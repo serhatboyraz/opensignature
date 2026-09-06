@@ -89,4 +89,28 @@ public sealed class SigningJobLockTests
         Assert.Equal(SigningJobStatus.Locked, job.Status);
         Assert.Null(job.LastError);
     }
+
+    [Fact]
+    public void ReleaseLockForRetry_clears_lock_without_completing()
+    {
+        var job = SigningJob.Create(Guid.CreateVersion7());
+        var now = DateTimeOffset.UtcNow;
+        job.AcquireLock(now.AddMinutes(15), startedAt: now);
+        job.MarkProcessing();
+
+        job.ReleaseLockForRetry("Expected 'obj' at offset 300.");
+
+        Assert.Equal(SigningJobStatus.Failed, job.Status);
+        Assert.Null(job.LockedUntil);
+        Assert.Null(job.CompletedAt);
+        Assert.Equal("Expected 'obj' at offset 300.", job.LastError);
+        Assert.True(job.CanAcquireOrReclaim(now));
+    }
+
+    [Fact]
+    public void ReleaseLockForRetry_throws_when_not_locked_or_processing()
+    {
+        var job = SigningJob.Create(Guid.CreateVersion7());
+        Assert.Throws<DomainException>(() => job.ReleaseLockForRetry("no lock"));
+    }
 }

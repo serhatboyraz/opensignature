@@ -578,10 +578,9 @@ Sonraki:
 
 - mevcut imza alanı yeniden kullanımı
 - multiple signatures
-- timestamp
-- LT/LTA
-- DSS/VRI validation data
-- archival timestamp.
+- VRI sözlüğü.
+
+Uygulandı (Faz 8): RFC 3161 imza zaman damgası (T), DSS (sertifika/CRL/OCSP, LT), belge zaman damgası `/SubFilter /ETSI.RFC3161` (LTA). Profiller sessizce B'ye düşürülmez.
 
 ## 15. XAdES
 
@@ -596,13 +595,10 @@ MVP:
 
 Sonraki:
 
-- T
-- LT
-- LTA
 - multiple signatures
-- signature policy
-- timestamps
-- OCSP/CRL evidence.
+- signature policy.
+
+Uygulandı (Faz 8): T (`SignatureTimeStamp`), LT (`CertificateValues` / `RevocationValues`), LTA (`ArchiveTimeStamp`). Profiller sessizce B'ye düşürülmez.
 
 ## 16. CAdES
 
@@ -615,22 +611,19 @@ MVP:
 
 Sonraki:
 
-- T
-- LT
-- LTA
-- signature policy
-- validation data
-- archival timestamp.
+- signature policy.
+
+Uygulandı (Faz 8): T (imza zaman damgası), LT (sertifika/iptal kanıtı), LTA (arşiv zaman damgası). Profiller sessizce B'ye düşürülmez.
 
 ## 17. ASiC
 
 ASiC-S:
 
-- one associated data/signature package.
+- one associated data/signature package (ZIP, uncompressed `mimetype` first, detached CAdES in `META-INF/signature.p7s`).
 
 ASiC-E:
 
-- multiple files and signatures.
+- multiple files and signatures (`ASiCManifest.xml` plus CAdES over the manifest).
 
 Container implementation:
 
@@ -638,6 +631,8 @@ Container implementation:
 - deterministic metadata rules
 - MIME metadata
 - signature relationship validation.
+
+T/LT/LTA inner CAdES üzerinde uygulanır.
 
 ## 18. Timestamp
 
@@ -657,6 +652,8 @@ RFC 3161:
 - message imprint
 - timestamp token
 - certificate validation.
+
+Worker varsayılanı: `Timestamping:Url` yapılandırılana kadar TSA yoktur. Testler, özel anahtarı dışa aktarmayan süreç-içi RFC 3161 TSA kullanabilir.
 
 Timestamp failures must never silently downgrade a requested T/LT/LTA signature to B.
 

@@ -86,5 +86,5 @@ public static class VerificationReportLimitations
     public const string BaselineB =
         "Cryptographic verification and certificate path checks for CAdES, XAdES, PAdES, and ASiC " +
         "(ASiC unpacks the inner CAdES). Not a full ETSI EN 319 102-1 AdES conformance report: " +
-        "T/LT/LTA timestamps and revocation evidence are not independently evaluated.";}
+        "T/LT/LTA timestamps and revocation evidence are not independently evaluated.";
 }

@@ -162,6 +162,22 @@ public sealed class SigningJob
         LockedUntil = null;
     }
 
+    /// <summary>
+    /// Drops an active lock after a retryable failure so the next delivery can acquire it.
+    /// Does not record <see cref="CompletedAt"/> — the job is not terminal.
+    /// </summary>
+    public void ReleaseLockForRetry(string? lastError = null)
+    {
+        if (Status is not (SigningJobStatus.Locked or SigningJobStatus.Processing))
+        {
+            throw new DomainException($"Cannot release signing job lock for retry in status {Status}.");
+        }
+
+        Status = SigningJobStatus.Failed;
+        LastError = string.IsNullOrWhiteSpace(lastError) ? null : lastError.Trim();
+        LockedUntil = null;
+    }
+
     public void MarkCancelled(DateTimeOffset? completedAt = null)
     {
         if (Status is SigningJobStatus.Completed or SigningJobStatus.Cancelled)

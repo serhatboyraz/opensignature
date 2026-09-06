@@ -6,7 +6,7 @@ Engineering architecture for **OpenSignature**, the asynchronous digital-signatu
 
 OpenSignature is a centralized enterprise signing platform built on .NET 10. Clients submit documents via REST; signing runs asynchronously on workers. Goals:
 
-- Support PAdES, XAdES, CAdES, and phased ASiC (profiles B → T → LT → LTA).
+- Support PAdES, XAdES, CAdES, ASiC-S, and ASiC-E (profiles B → T → LT → LTA).
 - Keep the API non-blocking: accept, persist, enqueue; never sign synchronously in the API.
 - Isolate cryptography behind replaceable signing providers (PFX for demo; PKCS#11 / smart card / HSM for production).
 - Store document binaries in file/object storage; PostgreSQL holds metadata, job state, and audit only.
@@ -70,7 +70,7 @@ Local dependencies: PostgreSQL and RabbitMQ via `docker-compose.yml`. Solution f
 | `OpenSignature.Infrastructure` | EF Core, PostgreSQL, storage adapters, RabbitMQ, outbox |
 | `OpenSignature.Signing.Contracts` | `ISigningProvider` and shared signing contracts |
 | `OpenSignature.Signing` | Provider implementations and format engines |
-| `OpenSignature.Validation` | Certificate + signature validation (Baseline B) and JSON reports |
+| `OpenSignature.Validation` | Certificate + signature validation (CAdES/XAdES/PAdES/ASiC crypto + certificate path) and JSON reports |
 | `OpenSignature.Worker` | Consumes jobs; signs; updates state |
 | `OpenSignature.Web` | React admin/demo UI |
 
@@ -139,9 +139,9 @@ Provider capabilities: list certificates, metadata, create digest, sign digest, 
 
 **Provider selection:** `ISigningProviderResolver` / `SigningProviderSelector` resolves a registered `ISigningProvider` by `SigningProviderType` and optional provider id from the request/configuration. Providers are registered in DI as `IEnumerable<ISigningProvider>` (e.g. `AddPfxSigningProvider`, `AddSmartCardSigningProvider`, `AddHsmSigningProvider`). Unsupported or ambiguous selections throw `UnsupportedSigningProviderException` (`SIGNING_PROVIDER_UNSUPPORTED`).
 
-**Signature engine (T050–T055):** `AddSignatureEngine` registers PFX + CAdES/XAdES/PAdES Baseline B format signers + `SignatureOrchestrator` as `ISignatureCreationService`. Crypto primitives live under `OpenSignature.Signing.Crypto`. Format signers never export private keys; digests are signed via `ISigningProvider.SignDigestAsync`. PAdES may include an optional visible widget (text “Digitally signed by …”, note, JPEG/PNG); appearance images are stored as `appearance.bin` and never placed on RabbitMQ. Unsupported profiles/formats throw `SIGNATURE_PROFILE_UNSUPPORTED` / `SIGNATURE_FORMAT_UNSUPPORTED` (no silent downgrade). See `docs/SIGNATURE-PROFILES.md`.
+**Signature engine (T050–T055, T080–T085):** `AddSignatureEngine` registers PFX + CAdES/XAdES/PAdES/ASiC-S/ASiC-E format signers, RFC 3161 timestamping, LT data providers, profile enhancers, and `SignatureOrchestrator` as `ISignatureCreationService`. Crypto primitives live under `OpenSignature.Signing.Crypto`. Format signers never export private keys; digests are signed via `ISigningProvider.SignDigestAsync`. PAdES may include an optional visible widget (text “Digitally signed by …”, note, JPEG/PNG); appearance images are stored as `appearance.bin` and never placed on RabbitMQ. Default TSA is unavailable until `Timestamping:Url` is set on the worker (`AddRfc3161TimestampAuthority`). Default LT provider includes only the signing certificate; LT/LTA fail unless CRL/OCSP evidence is registered. Missing TSA or revocation evidence throws `TIMESTAMP_AUTHORITY_UNAVAILABLE` / `SIGNATURE_VALIDATION_DATA_UNAVAILABLE` — never a silent downgrade to Baseline B. Unknown profiles/formats throw `SIGNATURE_PROFILE_UNSUPPORTED` / `SIGNATURE_FORMAT_UNSUPPORTED`. See `docs/SIGNATURE-PROFILES.md`.
 
-**Validation (T090–T092, T160–T162):** Library-first (`OpenSignature.Validation`). `ICertificateValidator` runs PRODUCT-SPEC §20 pipeline (validity → chain/trust → key usage → EKU → revocation → policy) with machine-readable codes. `IRevocationChecker` supports Offline/Online/SoftFail (OCSP then CRL; live fetch not enabled in MVP — stub-friendly). `ISignatureValidator` verifies CAdES/XAdES/PAdES Baseline B crypto + certificate path. `IValidationReportBuilder` emits JSON-serializable reports. Register via `AddOpenSignatureValidation` / `AddSignatureVerification`.
+**Validation (T090–T092, T160–T162):** Library-first (`OpenSignature.Validation`). `ICertificateValidator` runs PRODUCT-SPEC §20 pipeline (validity → chain/trust → key usage → EKU → revocation → policy) with machine-readable codes. `IRevocationChecker` supports Offline/Online/SoftFail (OCSP then CRL; live fetch not enabled in MVP — stub-friendly). `ISignatureValidator` verifies CAdES/XAdES/PAdES crypto + certificate path, and unpacks ASiC-S/E to verify the inner CAdES. It is not a full ETSI EN 319 102-1 evaluation of T/LT/LTA evidence. `IValidationReportBuilder` emits JSON-serializable reports. Register via `AddOpenSignatureValidation` / `AddSignatureVerification`.
 
 Verification APIs: `GET /api/v1/signatures/{id}/verification` (stored completed output) and `POST /api/v1/verifications` (ad-hoc upload, not persisted). The React UI shows the detailed report on the signature detail page and a dedicated Verify page. Not full ETSI EN 319 102-1 AdES conformance.
 
@@ -202,8 +202,9 @@ Worker consumption must be **idempotent** so at-least-once delivery does not cre
 1. Skip when the signature request or job is already terminal (`Completed` / `Cancelled` / `Rejected`).
 2. Atomically try-acquire a job lock (`ISigningJobLockService` / conditional PostgreSQL `UPDATE`): only one worker may transition `Pending`/`Failed` → `Locked`, or reclaim `Locked`/`Processing` when `LockedUntil` is missing or in the past.
 3. If the lock is not acquired (duplicate delivery or another worker holds a non-expired lock), log and ACK without signing.
-4. After crash/restart, expired `Locked`/`Processing` jobs may be reclaimed; active (non-expired) locks must not be stolen. Lock duration must exceed expected signing time.
-5. Before writing signed output, re-check terminal state so a late worker never double-writes after another completion.
+4. After a retryable signing failure, release the lock (job → `Failed`, `LockedUntil` cleared, request → `RetryScheduled`) before the message is retried so the next delivery can acquire it. Permanent failures (including unreadable PDF structure) mark both request and job `Failed`.
+5. After crash/restart, expired `Locked`/`Processing` jobs may be reclaimed; active (non-expired) locks must not be stolen. Lock duration must exceed expected signing time.
+6. Before writing signed output, re-check terminal state so a late worker never double-writes after another completion.
 
 ## 9. Multi-Tenancy Notes
 

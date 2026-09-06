@@ -386,7 +386,51 @@ internal sealed class PdfStructure
             return ReadClassicXref(input);
         }
 
-        return ReadXrefStream(offset);
+        try
+        {
+            return ReadXrefStream(offset);
+        }
+        catch (Exception ex) when (ex is InvalidOperationException or InvalidDataException)
+        {
+            // Hand-written PDFs often miscount startxref by a few bytes (e.g. pointing into the
+            // table instead of at the `xref` keyword). Scan nearby before failing.
+            var recovered = TryFindClassicXrefNear(offset);
+            if (recovered is int xrefOffset)
+            {
+                return ReadClassicXref(new PdfInput(_pdf, xrefOffset));
+            }
+
+            throw;
+        }
+    }
+
+    private int? TryFindClassicXrefNear(int offset)
+    {
+        var needle = "xref"u8;
+        var max = Math.Min(_pdf.Length - needle.Length, Math.Max(offset, 0));
+        var min = Math.Max(0, offset - 64);
+        for (var i = max; i >= min; i--)
+        {
+            if (!_pdf.AsSpan(i, needle.Length).SequenceEqual(needle))
+            {
+                continue;
+            }
+
+            if (i > 0 && !PdfInput.IsWhitespace(_pdf[i - 1]) && !PdfInput.IsDelimiter(_pdf[i - 1]))
+            {
+                continue;
+            }
+
+            var after = i + needle.Length;
+            if (after < _pdf.Length && !PdfInput.IsWhitespace(_pdf[after]) && !PdfInput.IsDelimiter(_pdf[after]))
+            {
+                continue;
+            }
+
+            return i;
+        }
+
+        return null;
     }
 
     private static (Dictionary<int, PdfXrefEntry> Entries, Dictionary<string, string> Trailer, int? Prev) ReadClassicXref(
@@ -542,7 +586,7 @@ internal sealed class PdfStructure
         _ = input.ReadNumber();
         if (!input.TryConsumeKeyword("obj"u8))
         {
-            throw new InvalidOperationException($"Expected 'obj' at offset {offset}.");
+            throw new InvalidDataException($"Expected 'obj' at offset {offset}.");
         }
 
         input.SkipWhitespaceAndComments();

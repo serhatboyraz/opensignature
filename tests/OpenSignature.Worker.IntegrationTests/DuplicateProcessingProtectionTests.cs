@@ -6,6 +6,7 @@ using OpenSignature.Application.Abstractions.Messaging;
 using OpenSignature.Application.Abstractions.Signing;
 using OpenSignature.Application.Abstractions.Storage;
 using OpenSignature.Application.Messages;
+using OpenSignature.Application.Messaging;
 using OpenSignature.Domain.Entities;
 using OpenSignature.Domain.Enums;
 using OpenSignature.Domain.ValueObjects;
@@ -115,6 +116,78 @@ public sealed class DuplicateProcessingProtectionTests : IAsyncLifetime
         Assert.Equal(SigningJobStatus.Completed, job.Status);
     }
 
+    [Fact]
+    public async Task Transient_signing_failure_releases_lock_so_retry_can_sign()
+    {
+        await using var provider = BuildProvider();
+        var seed = await SeedQueuedJobAsync(provider, "tenant-dup-retry");
+        var signer = (CountingSignatureCreationService)provider.GetRequiredService<ISignatureCreationService>();
+        signer.FailuresRemaining = 1;
+        signer.Failure = new IOException("simulated storage glitch");
+
+        await using (var scope = provider.CreateAsyncScope())
+        {
+            var processor = scope.ServiceProvider.GetRequiredService<ISigningJobProcessor>();
+            var ex = await Assert.ThrowsAsync<IOException>(() => processor.ProcessAsync(seed.Message));
+            Assert.Equal("simulated storage glitch", ex.Message);
+        }
+
+        await using (var verifyAfterFailure = provider.CreateAsyncScope())
+        {
+            var db = verifyAfterFailure.ServiceProvider.GetRequiredService<OpenSignatureDbContext>();
+            var request = await db.SignatureRequests.SingleAsync(r => r.Id == seed.Message.SignatureId);
+            var job = await db.SigningJobs.SingleAsync(j => j.Id == seed.Message.JobId);
+            Assert.Equal(SignatureStatus.RetryScheduled, request.Status);
+            Assert.Equal(SigningJobStatus.Failed, job.Status);
+            Assert.Null(job.LockedUntil);
+        }
+
+        var retry = seed.Message with { Attempt = 2 };
+        await using (var scope = provider.CreateAsyncScope())
+        {
+            var processor = scope.ServiceProvider.GetRequiredService<ISigningJobProcessor>();
+            await processor.ProcessAsync(retry);
+        }
+
+        Assert.Equal(2, signer.CallCount);
+
+        await using var verify = provider.CreateAsyncScope();
+        var verifyDb = verify.ServiceProvider.GetRequiredService<OpenSignatureDbContext>();
+        var completedRequest = await verifyDb.SignatureRequests.SingleAsync(r => r.Id == seed.Message.SignatureId);
+        var completedJob = await verifyDb.SigningJobs.SingleAsync(j => j.Id == seed.Message.JobId);
+        Assert.Equal(SignatureStatus.Completed, completedRequest.Status);
+        Assert.Equal(SigningJobStatus.Completed, completedJob.Status);
+        Assert.Null(completedJob.LockedUntil);
+    }
+
+    [Fact]
+    public async Task Unreadable_pdf_marks_job_failed_without_holding_lock()
+    {
+        await using var provider = BuildProvider();
+        var seed = await SeedQueuedJobAsync(provider, "tenant-dup-pdf");
+        var signer = (CountingSignatureCreationService)provider.GetRequiredService<ISignatureCreationService>();
+        signer.FailuresRemaining = 1;
+        signer.Failure = new InvalidDataException("Expected 'obj' at offset 300.");
+
+        await using (var scope = provider.CreateAsyncScope())
+        {
+            var processor = scope.ServiceProvider.GetRequiredService<ISigningJobProcessor>();
+            var ex = await Assert.ThrowsAsync<PermanentSigningJobException>(() => processor.ProcessAsync(seed.Message));
+            Assert.Contains("Expected 'obj'", ex.Message, StringComparison.Ordinal);
+        }
+
+        Assert.Equal(1, signer.CallCount);
+
+        await using var verify = provider.CreateAsyncScope();
+        var db = verify.ServiceProvider.GetRequiredService<OpenSignatureDbContext>();
+        var request = await db.SignatureRequests.SingleAsync(r => r.Id == seed.Message.SignatureId);
+        var job = await db.SigningJobs.SingleAsync(j => j.Id == seed.Message.JobId);
+        Assert.Equal(SignatureStatus.Failed, request.Status);
+        Assert.Equal(SigningJobStatus.Failed, job.Status);
+        Assert.Null(job.LockedUntil);
+        Assert.Equal("SIGNING_OPERATION_FAILED", request.ErrorCode?.Value);
+    }
+
     private async Task<SeededJob> SeedQueuedJobAsync(ServiceProvider provider, string tenant)
     {
         await using var scope = provider.CreateAsyncScope();
@@ -196,15 +269,26 @@ public sealed class DuplicateProcessingProtectionTests : IAsyncLifetime
 
         public TimeSpan Delay { get; set; } = TimeSpan.Zero;
 
+        public int FailuresRemaining { get; set; }
+
+        public Exception? Failure { get; set; }
+
         public async Task<SignatureCreationResult> SignAsync(
             Stream inputStream,
             SignatureFormat format,
             SignatureProfile profile,
             SigningProviderType providerType,
             SigningCertificateSelector? certificateSelector,
-            CancellationToken cancellationToken = default)
+            CancellationToken cancellationToken = default,
+            SignatureAppearanceOptions? appearance = null)
         {
             Interlocked.Increment(ref _callCount);
+            if (FailuresRemaining > 0)
+            {
+                FailuresRemaining--;
+                throw Failure ?? new IOException("simulated signing failure");
+            }
+
             if (Delay > TimeSpan.Zero)
             {
                 await Task.Delay(Delay, cancellationToken).ConfigureAwait(false);

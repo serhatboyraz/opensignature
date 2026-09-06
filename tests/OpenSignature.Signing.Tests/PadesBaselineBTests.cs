@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Text;
 using OpenSignature.Signing.Contracts;
 using OpenSignature.Signing.Formats.Pades;
@@ -71,6 +72,39 @@ public sealed class PadesBaselineBTests
         var signer = new PadesBaselineBSigner();
         await Assert.ThrowsAsync<InvalidOperationException>(() =>
             signer.SignAsync(Encoding.UTF8.GetBytes("not a pdf"), provider, selector));
+    }
+
+    [Fact]
+    public async Task Pades_b_signs_classic_xref_when_startxref_offset_is_slightly_wrong()
+    {
+        using var material = CreateMaterial();
+        await using var provider = CreateProvider(material);
+        var selector = await DefaultSelectorAsync(provider);
+
+        var pdf = ShiftStartXref(PadesBaselineBSigner.CreateMinimalPdf(), 8);
+        var structure = PdfStructure.Load(pdf);
+        Assert.Equal(1, structure.PageCount);
+        Assert.Equal(1, structure.RootObjectNumber);
+
+        var signer = new PadesBaselineBSigner();
+        var result = await signer.SignAsync(pdf, provider, selector);
+        PadesBaselineBSigner.ValidateSignedPdf(result.SignedPdf);
+    }
+
+    private static byte[] ShiftStartXref(byte[] pdf, int delta)
+    {
+        var text = Encoding.ASCII.GetString(pdf);
+        const string marker = "startxref\n";
+        var index = text.LastIndexOf(marker, StringComparison.Ordinal);
+        Assert.True(index >= 0);
+
+        var numberStart = index + marker.Length;
+        var numberEnd = text.IndexOf('\n', numberStart);
+        Assert.True(numberEnd > numberStart);
+        var original = int.Parse(text[numberStart..numberEnd], CultureInfo.InvariantCulture);
+        var replacement = (original + delta).ToString(CultureInfo.InvariantCulture);
+        var rebuilt = string.Concat(text.AsSpan(0, numberStart), replacement, text.AsSpan(numberEnd));
+        return Encoding.ASCII.GetBytes(rebuilt);
     }
 
     [Fact]

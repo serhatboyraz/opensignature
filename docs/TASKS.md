@@ -447,49 +447,94 @@
 - Commit:
   - `fix(worker): prevent duplicate signature processing`
 
+### T072 — Release Job Lock On Transient Failure
+- Status: `DONE`
+- Priority: P0
+- Depends on: T071
+- Scope:
+  - Transient signing failures must release the job lock (`LockedUntil`) and move the request to `RetryScheduled` so the next delivery can acquire the lock.
+  - Permanent signing failures (including unreadable PDF structure) must mark the job/request failed instead of leaving `Processing`.
+  - Duplicate deliveries that lose the lock race still ACK without signing.
+- Acceptance:
+  - A worker that fails after acquiring the lock does not leave the job stuck in `Processing`.
+  - A subsequent retry can acquire the lock and continue.
+  - Unreadable PDF input fails permanently with a machine-readable error rather than retry-ACK.
+- Tests:
+  - domain lock release
+  - processor transient failure then successful retry
+  - processor permanent PDF parse failure marks failed
+- Commit:
+  - `fix(worker): release signing job lock on retryable failure`
+
 ---
 
 ## Phase 8 — ASiC and Advanced Profiles
 
 ### T080 — ASiC-S
-- Status: `IN_PROGRESS`
+- Status: `DONE`
 - Priority: P1
 - Depends on: T051, T052
+- Scope:
+  - ZIP ASiC-S with uncompressed `mimetype` first and detached CAdES in `META-INF/signature.p7s`.
+  - Orchestrator + validator unpack/verify inner CAdES.
+- Tests:
+  - `AsicSSignerTests`, orchestrator ASiC-S, validation tamper, interop.
 - Commit:
   - `feat(signing): add ASiC-S container support`
 
 ### T081 — ASiC-E
-- Status: `SKIPPED`
+- Status: `DONE`
 - Priority: P1
 - Depends on: T080
+- Scope:
+  - ZIP ASiC-E with `ASiCManifest.xml`; CAdES over the manifest.
+- Tests:
+  - `AsicESignerTests`, orchestrator ASiC-E, interop.
 - Commit:
   - `feat(signing): add ASiC-E container support`
 
 ### T082 — RFC 3161 Timestamping
-- Status: `SKIPPED`
+- Status: `DONE`
 - Priority: P1
 - Depends on: T051, T052, T053
+- Scope:
+  - HTTP RFC 3161 client and in-process TSA for tests.
+  - Default unavailable TSA; worker enables HTTP TSA when `Timestamping:Url` is set.
+- Tests:
+  - `Rfc3161TimestampAuthorityTests`, orchestrator T without TSA.
 - Commit:
   - `feat(timestamp): add RFC 3161 timestamp provider`
 
 ### T083 — PAdES-T/LT/LTA
-- Status: `SKIPPED`
+- Status: `DONE`
 - Priority: P1
 - Depends on: T053, T082
+- Scope:
+  - T: CMS signature timestamp; LT: DSS; LTA: document timestamp `/ETSI.RFC3161`.
+- Tests:
+  - `XadesAndPadesAdvancedProfileTests`
 - Commit:
   - `feat(signing): add advanced PAdES profiles`
 
 ### T084 — XAdES-T/LT/LTA
-- Status: `SKIPPED`
+- Status: `DONE`
 - Priority: P1
 - Depends on: T052, T082
+- Scope:
+  - Unsigned `SignatureTimeStamp`, `CertificateValues`, `RevocationValues`, `ArchiveTimeStamp`.
+- Tests:
+  - `XadesAndPadesAdvancedProfileTests`
 - Commit:
   - `feat(signing): add advanced XAdES profiles`
 
 ### T085 — CAdES-T/LT/LTA
-- Status: `SKIPPED`
+- Status: `DONE`
 - Priority: P1
 - Depends on: T051, T082
+- Scope:
+  - Signature timestamp token, cert/revocation values, archive-time-stamp-v3.
+- Tests:
+  - `CadesAdvancedProfileTests`
 - Commit:
   - `feat(signing): add advanced CAdES profiles`
 

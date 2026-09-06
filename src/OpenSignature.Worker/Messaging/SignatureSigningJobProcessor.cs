@@ -1,4 +1,5 @@
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Options;
 using OpenSignature.Application.Abstractions.Messaging;
 using OpenSignature.Application.Abstractions.Persistence;
 using OpenSignature.Application.Abstractions.Signing;
@@ -32,19 +33,22 @@ public sealed class SignatureSigningJobProcessor : ISigningJobProcessor
     private readonly IFileStorage _fileStorage;
     private readonly ISignatureCreationService _signatureCreation;
     private readonly ILogger<SignatureSigningJobProcessor> _logger;
+    private readonly SigningJobRetryOptions _retryOptions;
 
     public SignatureSigningJobProcessor(
         OpenSignatureDbContext db,
         ISigningJobLockService jobLock,
         IFileStorage fileStorage,
         ISignatureCreationService signatureCreation,
-        ILogger<SignatureSigningJobProcessor> logger)
+        ILogger<SignatureSigningJobProcessor> logger,
+        IOptions<SigningJobRetryOptions>? retryOptions = null)
     {
         _db = db ?? throw new ArgumentNullException(nameof(db));
         _jobLock = jobLock ?? throw new ArgumentNullException(nameof(jobLock));
         _fileStorage = fileStorage ?? throw new ArgumentNullException(nameof(fileStorage));
         _signatureCreation = signatureCreation ?? throw new ArgumentNullException(nameof(signatureCreation));
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
+        _retryOptions = retryOptions?.Value ?? new SigningJobRetryOptions();
     }
 
     public async Task ProcessAsync(SigningJobMessage message, CancellationToken cancellationToken = default)
@@ -121,6 +125,40 @@ public sealed class SignatureSigningJobProcessor : ISigningJobProcessor
 
         await _db.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
 
+        try
+        {
+            await CreateAndPersistSignatureAsync(message, tenantId, request, job, cancellationToken)
+                .ConfigureAwait(false);
+        }
+        catch (OperationCanceledException)
+        {
+            await ReleaseLockForRetryAsync(
+                    request,
+                    job,
+                    markRetryScheduled: false,
+                    "Signing job was cancelled before completion.",
+                    cancellationToken)
+                .ConfigureAwait(false);
+            throw;
+        }
+        catch (PermanentSigningJobException)
+        {
+            throw;
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            await HandleSigningFailureAsync(message, request, job, ex, cancellationToken).ConfigureAwait(false);
+            throw;
+        }
+    }
+
+    private async Task CreateAndPersistSignatureAsync(
+        SigningJobMessage message,
+        TenantId tenantId,
+        SignatureRequest request,
+        SigningJob job,
+        CancellationToken cancellationToken)
+    {
         var inputKey = StorageKey.Create(message.InputPath);
         await using var inputStream = await _fileStorage
             .OpenReadAsync(inputKey, cancellationToken)
@@ -210,20 +248,6 @@ public sealed class SignatureSigningJobProcessor : ISigningJobProcessor
                 "Signature creation service is not implemented yet.",
                 ex);
         }
-        catch (PermanentSigningJobException)
-        {
-            throw;
-        }
-        catch (Exception ex) when (ex is not OperationCanceledException)
-        {
-            // Leave request/job non-terminal so bounded retries can re-process.
-            _logger.LogError(
-                ex,
-                "Signing job {JobId} failed for signature {SignatureId}; allowing retry classification",
-                message.JobId,
-                message.SignatureId);
-            throw;
-        }
 
         await using (signed.Content)
         {
@@ -298,6 +322,75 @@ public sealed class SignatureSigningJobProcessor : ISigningJobProcessor
         }
 
         await _db.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+    }
+
+    private async Task HandleSigningFailureAsync(
+        SigningJobMessage message,
+        SignatureRequest request,
+        SigningJob job,
+        Exception exception,
+        CancellationToken cancellationToken)
+    {
+        var kind = SigningJobFailureClassifier.Classify(exception);
+        var exhausted = message.Attempt >= _retryOptions.MaxAttempts;
+        if (kind == SigningJobFailureKind.Permanent || exhausted)
+        {
+            var errorMessage = exhausted && kind != SigningJobFailureKind.Permanent
+                ? $"Signing failed after {message.Attempt} attempt(s): {exception.Message}"
+                : exception.Message;
+
+            await MarkFailedAsync(
+                    request,
+                    job,
+                    ErrorCode.Create("SIGNING_OPERATION_FAILED"),
+                    errorMessage,
+                    exception,
+                    cancellationToken)
+                .ConfigureAwait(false);
+            throw new PermanentSigningJobException(errorMessage, exception);
+        }
+
+        _logger.LogError(
+            exception,
+            "Signing job {JobId} failed for signature {SignatureId}; releasing lock for retry classification",
+            job.Id,
+            request.Id);
+
+        await ReleaseLockForRetryAsync(
+                request,
+                job,
+                markRetryScheduled: true,
+                exception.Message,
+                cancellationToken)
+            .ConfigureAwait(false);
+    }
+
+    private async Task ReleaseLockForRetryAsync(
+        SignatureRequest request,
+        SigningJob job,
+        bool markRetryScheduled,
+        string message,
+        CancellationToken cancellationToken)
+    {
+        var changed = false;
+
+        if (markRetryScheduled
+            && request.Status is SignatureStatus.Processing or SignatureStatus.Queued)
+        {
+            request.MarkRetryScheduled(ErrorCode.Create("SIGNING_OPERATION_FAILED"), message);
+            changed = true;
+        }
+
+        if (job.Status is SigningJobStatus.Processing or SigningJobStatus.Locked)
+        {
+            job.ReleaseLockForRetry(message);
+            changed = true;
+        }
+
+        if (changed)
+        {
+            await _db.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+        }
     }
 
     private static string SignedOutputFileName(SignatureFormat format) => format switch

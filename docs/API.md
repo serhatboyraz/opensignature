@@ -54,6 +54,9 @@ Errors use RFC 7807 Problem Details. Machine-readable codes are in the `errorCod
 | `SIGNATURE_ALREADY_COMPLETED` | 409 | Operation conflicts with a completed signature |
 | `SIGNING_OPERATION_FAILED` | 500 / job failure | Unexpected signing or API failure |
 | `SIGNING_PROVIDER_UNSUPPORTED` | job failure | Provider type not implemented for the job |
+| `TIMESTAMP_AUTHORITY_UNAVAILABLE` | job failure | T/LT/LTA requested but no RFC 3161 TSA is configured |
+| `TIMESTAMP_OPERATION_FAILED` | job failure | TSA HTTP/token validation failed (retried, then DLQ) |
+| `SIGNATURE_VALIDATION_DATA_UNAVAILABLE` | job failure | LT/LTA requested but CRL/OCSP evidence is missing |
 
 Clients should treat `errorCode` as stable for branching; `detail` is human-readable and may change.
 
@@ -207,7 +210,7 @@ Requests cancellation. Reliable only before signing has progressed past a cancel
 
 Verifies the stored signed output of a completed signature request. Does not perform signing. Returns a detailed report: overall status (`VALID` / `INVALID` / `INDETERMINATE`), cryptographic check, certificate path, revocation, and machine-readable reason codes.
 
-MVP coverage: Baseline B CAdES (attached), XAdES, and PAdES. Not a full ETSI EN 319 102-1 AdES conformance report.
+Coverage: CAdES (attached), XAdES, PAdES, and ASiC-S/E (inner CAdES). Cryptographic and certificate-path checks only — not a full ETSI EN 319 102-1 AdES conformance report (T/LT/LTA evidence is not independently evaluated).
 
 #### Headers
 
@@ -235,7 +238,7 @@ Example `200` body:
   "format": "CAdES",
   "signatureId": "0198...",
   "detail": null,
-  "limitations": "MVP Baseline B cryptographic verification and certificate path checks. Not a full ETSI EN 319 102-1 AdES conformance report (no T/LT/LTA evidence or ASiC).",
+  "limitations": "Cryptographic verification and certificate path checks for CAdES, XAdES, PAdES, and ASiC (ASiC unpacks the inner CAdES). Not a full ETSI EN 319 102-1 AdES conformance report: T/LT/LTA timestamps and revocation evidence are not independently evaluated.",
   "signature": {
     "cryptoValid": true,
     "signerThumbprint": "...",
@@ -387,5 +390,5 @@ The generated document includes signature routes under `/api/v1/signatures` (inc
 ## Notes
 
 - Document binaries are never placed in RabbitMQ messages; only job/metadata references are queued.
-- Do not silently downgrade a requested signature profile.
-- Verification reports cover Baseline B crypto + certificate path checks; they are not full ETSI EN 319 102-1 AdES conformance reports.
+- Do not silently downgrade a requested signature profile. T/LT/LTA require worker `Timestamping:Url`; LT/LTA also need CRL or OCSP evidence (`TIMESTAMP_AUTHORITY_UNAVAILABLE` / `SIGNATURE_VALIDATION_DATA_UNAVAILABLE`).
+- Verification reports cover CAdES/XAdES/PAdES/ASiC cryptographic and certificate-path checks; they are not full ETSI EN 319 102-1 AdES conformance reports.
