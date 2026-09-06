@@ -6,6 +6,30 @@ Bağımsız .NET dijital imza platformu: asenkron imzalama, PostgreSQL meta veri
 
 ---
 
+## See it in action / Nasıl çalışır
+
+Walkthrough GIFs of the OpenSignature web UI live in [`assets/`](assets/). They show creating an asynchronous signature and verifying the signed file.
+
+OpenSignature web arayüzünün adım adım kayıtları [`assets/`](assets/) klasöründedir. Asenkron imza oluşturmayı ve imzalı dosyayı doğrulamayı gösterirler.
+
+### Create a signature / İmza oluşturma
+
+Upload a document, choose format, profile, and provider, then submit. The session list polls until the job moves from **Pending** to **Completed**.
+
+Belgeyi yükleyin; biçim, profil ve sağlayıcıyı seçip gönderin. Oturum listesi iş **Pending** durumundan **Completed** olana kadar yoklar.
+
+![Create a signature in OpenSignature](assets/signing-full.gif)
+
+### Verify a signature / İmza doğrulama
+
+On **Verify**, upload a signed CAdES, XAdES, PAdES, or ASiC file and run cryptographic and certificate checks (detached CAdES also needs the original file).
+
+**Verify** sayfasında imzalı CAdES, XAdES, PAdES veya ASiC dosyasını yükleyip kriptografik ve sertifika kontrollerini çalıştırın (ayrık CAdES için orijinal dosya da gerekir).
+
+![Verify a signature in OpenSignature](assets/signature-verification.gif)
+
+---
+
 ## Architecture / Mimari
 
 ![OpenSignature architecture](docs/assets/images/architecture-diagram.svg)
@@ -159,6 +183,7 @@ dotnet test OpenSignature.slnx
 src/OpenSignature.Api|Application|Domain|Infrastructure|Signing|Signing.Contracts|Validation|Worker|Web
 tests/
 docs/                 # engineering sources + MkDocs (en/, tr/, assets/)
+assets/               # UI walkthrough GIFs (signing + verification)
 mkdocs.yaml
 scripts/Start-Development.ps1
 scripts/Generate-DevCertificate.ps1
