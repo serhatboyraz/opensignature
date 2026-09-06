@@ -8,9 +8,9 @@ Bağımsız .NET dijital imza platformu: asenkron imzalama, PostgreSQL meta veri
 
 ## See it in action / Nasıl çalışır
 
-Walkthrough GIFs of the OpenSignature web UI live in [`assets/`](assets/). They show creating an asynchronous signature and verifying the signed file.
+Walkthroughs in [`assets/`](assets/) show creating an asynchronous signature, the signed PDF with a visible stamp, verifying that file, and the **VALID** report.
 
-OpenSignature web arayüzünün adım adım kayıtları [`assets/`](assets/) klasöründedir. Asenkron imza oluşturmayı ve imzalı dosyayı doğrulamayı gösterirler.
+[`assets/`](assets/) içindeki kayıtlar asenkron imza oluşturmayı, görünür damgalı imzalı PDF’i, doğrulamayı ve **VALID** raporunu gösterir.
 
 ### Create a signature / İmza oluşturma
 
@@ -20,6 +20,12 @@ Belgeyi yükleyin; biçim, profil ve sağlayıcıyı seçip gönderin. Oturum li
 
 ![Create a signature in OpenSignature](assets/signing-full.gif)
 
+The completed PAdES file opens with a visible signature stamp. A PDF reader reports the document as signed and all signatures valid (`İmzalandı ve tüm imzalar geçerli`).
+
+Tamamlanan PAdES dosyası görünür imza damgasıyla açılır. PDF okuyucu belgenin imzalandığını ve tüm imzaların geçerli olduğunu gösterir.
+
+![Signed PDF with a valid visible signature stamp](assets/valid-signature.png)
+
 ### Verify a signature / İmza doğrulama
 
 On **Verify**, upload a signed CAdES, XAdES, PAdES, or ASiC file and run cryptographic and certificate checks (detached CAdES also needs the original file).
@@ -27,6 +33,12 @@ On **Verify**, upload a signed CAdES, XAdES, PAdES, or ASiC file and run cryptog
 **Verify** sayfasında imzalı CAdES, XAdES, PAdES veya ASiC dosyasını yükleyip kriptografik ve sertifika kontrollerini çalıştırın (ayrık CAdES için orijinal dosya da gerekir).
 
 ![Verify a signature in OpenSignature](assets/signature-verification.gif)
+
+A passing PAdES check returns **VALID** with `SIG_VALID` (cryptographic signature verified) and `CERT_VALID` (certificate path is valid).
+
+Başarılı bir PAdES kontrolü **VALID** döner: `SIG_VALID` (kriptografik imza doğrulandı) ve `CERT_VALID` (sertifika yolu geçerli).
+
+![OpenSignature verification report showing VALID](assets/validation-result.jpg)
 
 ---
 
@@ -183,7 +195,7 @@ dotnet test OpenSignature.slnx
 src/OpenSignature.Api|Application|Domain|Infrastructure|Signing|Signing.Contracts|Validation|Worker|Web
 tests/
 docs/                 # engineering sources + MkDocs (en/, tr/, assets/)
-assets/               # UI walkthrough GIFs (signing + verification)
+assets/               # UI walkthrough GIFs and result screenshots
 mkdocs.yaml
 scripts/Start-Development.ps1
 scripts/Generate-DevCertificate.ps1
