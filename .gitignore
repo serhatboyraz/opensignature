@@ -22,7 +22,8 @@ coverage/
 .env
 .env.*
 !.env.example
-secrets/
+# Root dump folder only — do not ignore C# namespaces named Secrets/
+/secrets/
 **/appsettings.*.local.json
 
 ## Node / React
