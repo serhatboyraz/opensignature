@@ -46,8 +46,6 @@ Başarılı bir PAdES kontrolü **VALID** döner: `SIG_VALID` (kriptografik imza
 
 ![OpenSignature architecture](docs/assets/images/architecture-diagram.svg)
 
-![System overview](docs/assets/images/architecture-overview.png)
-
 ```mermaid
 flowchart LR
   Client -->|POST /signatures| Api
@@ -74,6 +72,8 @@ Async pipeline:
 
 ## Documentation / Dokümantasyon
 
+Published site (GitHub Pages): [English](https://serhatboyraz.github.io/opensignature/) · [Türkçe](https://serhatboyraz.github.io/opensignature/tr/)
+
 | English | Türkçe |
 | --- | --- |
 | [MkDocs site (EN)](docs/en/index.md) | [MkDocs sitesi (TR)](docs/tr/index.md) |
@@ -85,14 +85,14 @@ Async pipeline:
 | [Operations](docs/en/operations.md) | [Operasyon](docs/tr/operations.md) |
 | [Task checklist](docs/TASKS.md) | [Görev listesi](docs/TASKS.md) |
 
-Build the bilingual docs site:
+Preview locally:
 
 ```bash
 pip install -r requirements-docs.txt
 mkdocs serve
 ```
 
-Open http://127.0.0.1:8000 and use the language switcher (**English** / **Türkçe**). Config: [`mkdocs.yaml`](mkdocs.yaml).
+Open http://127.0.0.1:8000 and use the language switcher (**English** / **Türkçe**). Config: [`mkdocs.yaml`](mkdocs.yaml). Pushes to `main` that touch `docs/` publish via GitHub Actions.
 
 All source code, identifiers, logs, tests and commit messages are English-only.  
 Kaynak kodu, tanımlayıcılar, loglar, testler ve commit mesajları yalnızca İngilizcedir.

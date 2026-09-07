@@ -81,8 +81,6 @@ flowchart LR
 
 ## İmza sağlayıcıları
 
-![İmza sağlayıcıları](../assets/images/signing-providers.png){ .architecture-hero }
-
 ```mermaid
 flowchart TB
   I[ISigningProvider]

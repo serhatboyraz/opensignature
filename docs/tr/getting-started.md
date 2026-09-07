@@ -90,6 +90,10 @@ dotnet test OpenSignature.slnx
 
 ## 5. Dokümantasyon sitesi
 
+Yayın: [https://serhatboyraz.github.io/opensignature/tr/](https://serhatboyraz.github.io/opensignature/tr/) (English: [kök site](https://serhatboyraz.github.io/opensignature/)).
+
+Yerel önizleme:
+
 ```bash
 pip install -r requirements-docs.txt
 mkdocs serve

@@ -81,8 +81,6 @@ flowchart LR
 
 ## Signing providers
 
-![Signing providers](../assets/images/signing-providers.png){ .architecture-hero }
-
 ```mermaid
 flowchart TB
   I[ISigningProvider]

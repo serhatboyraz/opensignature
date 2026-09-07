@@ -2,7 +2,7 @@
 
 **OpenSignature**, kurumsal PAdES, XAdES, CAdES ve ASiC iş akışları için bağımsız bir .NET dijital imza platformudur. İstemciler belgeleri REST üzerinden gönderir; imzalama işçi süreçlerinde asenkron çalışır. PostgreSQL meta veriyi saklar; dosya depolama ikili dosyaları tutar; RabbitMQ yalnızca iş referanslarını taşır.
 
-![OpenSignature sistem mimarisi](../assets/images/architecture-overview.png){ .architecture-hero }
+![OpenSignature sistem mimarisi](../assets/images/architecture-diagram.svg){ .architecture-hero }
 <p class="flow-caption">Sistem genel bakışı — API, depolama, kuyruk, işçi ve imza sağlayıcıları.</p>
 
 ## Mimari ilkeler
@@ -25,7 +25,7 @@
 
 ## Asenkron imzalama özeti
 
-![Asenkron imza akışı](../assets/images/async-signing-flow.png){ .architecture-hero }
+![Asenkron imza akışı](../assets/images/async-flow-diagram.svg){ .architecture-hero }
 
 ```mermaid
 flowchart LR

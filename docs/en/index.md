@@ -2,7 +2,7 @@
 
 **OpenSignature** is an independent .NET digital-signature platform for enterprise PAdES, XAdES, CAdES, and ASiC workflows. Clients submit documents over REST; workers sign asynchronously. PostgreSQL stores metadata; file storage holds binaries; RabbitMQ carries job references only.
 
-![OpenSignature system architecture](../assets/images/architecture-overview.png){ .architecture-hero }
+![OpenSignature system architecture](../assets/images/architecture-diagram.svg){ .architecture-hero }
 <p class="flow-caption">System overview — API, storage, queue, worker, and signing providers.</p>
 
 ## Why this architecture
@@ -25,7 +25,7 @@
 
 ## Async signing at a glance
 
-![Async signing flow](../assets/images/async-signing-flow.png){ .architecture-hero }
+![Async signing flow](../assets/images/async-flow-diagram.svg){ .architecture-hero }
 
 ```mermaid
 flowchart LR
