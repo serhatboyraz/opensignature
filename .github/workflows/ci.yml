@@ -1,0 +1,192 @@
+# Build, test, and (on main) publish Api / Worker / Web images to GHCR.
+name: CI/CD
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  actions: write
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
+
+env:
+  DOTNET_CLI_TELEMETRY_OPTOUT: "1"
+  DOTNET_NOLOGO: "1"
+  NUGET_XMLDOC_MODE: skip
+
+jobs:
+  dotnet:
+    name: .NET build and test
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Set up .NET
+        uses: actions/setup-dotnet@v5
+        with:
+          global-json-file: global.json
+          cache: true
+          cache-dependency-path: Directory.Packages.props
+
+      - name: Restore
+        run: >
+          dotnet restore OpenSignature.slnx
+          --verbosity minimal
+          /p:NuGetAudit=true
+          /p:NuGetAuditMode=all
+          /p:NuGetAuditLevel=moderate
+
+      - name: Build
+        run: dotnet build OpenSignature.slnx -c Release --no-restore --verbosity minimal
+
+      - name: Test
+        run: dotnet test OpenSignature.slnx -c Release --no-build --verbosity minimal
+
+      - name: Audit NuGet vulnerabilities
+        run: |
+          set -euo pipefail
+          dotnet list OpenSignature.slnx package --vulnerable --include-transitive --format json --output-version 1 \
+            | tee nuget-audit.json
+          python3 - <<'PY'
+          import json
+          import sys
+          from pathlib import Path
+
+          data = json.loads(Path("nuget-audit.json").read_text(encoding="utf-8"))
+          found: list[tuple[str, str]] = []
+
+          def walk(node: object) -> None:
+              if isinstance(node, dict):
+                  vulns = node.get("vulnerabilities")
+                  if vulns:
+                      pkg_id = str(node.get("id") or node.get("name") or "unknown")
+                      version = str(node.get("resolvedVersion") or node.get("version") or "?")
+                      found.append((pkg_id, version))
+                  for value in node.values():
+                      walk(value)
+              elif isinstance(node, list):
+                  for item in node:
+                      walk(item)
+
+          walk(data)
+          if found:
+              print("Vulnerable NuGet packages were reported:", file=sys.stderr)
+              for pkg_id, version in sorted(set(found)):
+                  print(f"  {pkg_id} {version}", file=sys.stderr)
+              sys.exit(1)
+          print("No vulnerable NuGet packages reported.")
+          PY
+
+  web:
+    name: Web lint and build
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: src/OpenSignature.Web
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v5
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: src/OpenSignature.Web/package-lock.json
+
+      - name: Install
+        run: npm ci
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Audit npm vulnerabilities
+        run: npm audit --audit-level=high
+
+      - name: Build
+        run: npm run build
+        env:
+          VITE_API_BASE_URL: ""
+          VITE_TENANT_ID: tenant-demo
+
+  images:
+    name: Publish ${{ matrix.name }} image
+    needs: [dotnet, web]
+    if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: read
+      actions: write
+      packages: write
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: api
+            dockerfile: docker/api/Dockerfile
+            title: OpenSignature API
+            build_args: ""
+          - name: worker
+            dockerfile: docker/worker/Dockerfile
+            title: OpenSignature Worker
+            build_args: ""
+          - name: web
+            dockerfile: docker/web/Dockerfile
+            title: OpenSignature Web
+            build_args: |
+              VITE_API_BASE_URL=
+              VITE_TENANT_ID=tenant-demo
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Prepare image name
+        id: image
+        run: |
+          repo="${GITHUB_REPOSITORY,,}"
+          echo "name=ghcr.io/${repo}/${{ matrix.name }}" >> "$GITHUB_OUTPUT"
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Docker metadata
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ steps.image.outputs.name }}
+          labels: |
+            org.opencontainers.image.title=${{ matrix.title }}
+            org.opencontainers.image.description=${{ matrix.title }} container image
+            org.opencontainers.image.vendor=OpenSignature
+          tags: |
+            type=raw,value=latest,enable={{is_default_branch}}
+            type=sha,prefix=sha-
+
+      - name: Build and push
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: ${{ matrix.dockerfile }}
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          build-args: ${{ matrix.build_args }}
+          cache-from: type=gha,scope=${{ matrix.name }}
+          cache-to: type=gha,mode=max,scope=${{ matrix.name }}

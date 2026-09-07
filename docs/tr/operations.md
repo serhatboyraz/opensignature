@@ -2,6 +2,18 @@
 
 Sağlık, metrikler, yeniden denemeler, zaman damgası ve olay müdahalesi için işletim kılavuzu.
 
+## CI/CD
+
+Çekme istekleri restore, derleme, test, web lint ve zafiyet denetimlerini çalıştırır (`.github/workflows/ci.yml`). `main`’e push üç GHCR imajı da yayınlar:
+
+```text
+ghcr.io/serhatboyraz/opensignature/api:latest
+ghcr.io/serhatboyraz/opensignature/worker:latest
+ghcr.io/serhatboyraz/opensignature/web:latest
+```
+
+Her imaj `sha-<kısa-sha>` ile de etiketlenir. Sırları veya PFX dosyalarını imaja gömmeyin. GHCR paketleri ilk yayında özeldir; anonim çekim için görünürlüğü Public yapın.
+
 ## Sağlık
 
 ```text

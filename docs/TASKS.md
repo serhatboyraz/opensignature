@@ -822,7 +822,7 @@
 ## Phase 14 — CI/CD and Operations
 
 ### T140 — CI
-- Status: `TODO`
+- Status: `DONE`
 - Priority: P0
 - Depends on: T001
 - Pipeline:
@@ -831,8 +831,9 @@
   - test
   - lint
   - security checks
+  - publish Api, Worker, and Web images to GHCR on `main`
 - Commit:
-  - `ci: add build and test pipeline`
+  - `ci: add build, test, and container publish pipeline`
 
 ### T141 — Container Images
 - Status: `DONE`

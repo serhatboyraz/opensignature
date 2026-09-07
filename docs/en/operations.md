@@ -2,6 +2,18 @@
 
 Runbook-oriented guidance for health, metrics, retries, timestamping, and incidents.
 
+## CI/CD
+
+Pull requests run restore, build, tests, web lint, and vulnerability audits (`.github/workflows/ci.yml`). Pushes to `main` also publish three GHCR images:
+
+```text
+ghcr.io/serhatboyraz/opensignature/api:latest
+ghcr.io/serhatboyraz/opensignature/worker:latest
+ghcr.io/serhatboyraz/opensignature/web:latest
+```
+
+Each image is also tagged `sha-<short-sha>`. Do not bake secrets or PFX files into images. First-time GHCR packages are private until visibility is changed.
+
 ## Health
 
 ```text

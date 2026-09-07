@@ -88,7 +88,19 @@ curl -s -o signed.bin "http://localhost:5270/api/v1/signatures/{id}/content" -H 
 dotnet test OpenSignature.slnx
 ```
 
-## 5. Documentation site
+## 5. CI/CD
+
+Pull requests run the .NET test suite and the web lint/build. Pushes to `main` also publish three container images to GitHub Container Registry:
+
+```bash
+docker pull ghcr.io/serhatboyraz/opensignature/api:latest
+docker pull ghcr.io/serhatboyraz/opensignature/worker:latest
+docker pull ghcr.io/serhatboyraz/opensignature/web:latest
+```
+
+Details: [Operations](operations.md).
+
+## 6. Documentation site
 
 Published: [https://serhatboyraz.github.io/opensignature/](https://serhatboyraz.github.io/opensignature/) (Türkçe: [/tr/](https://serhatboyraz.github.io/opensignature/tr/)).
 

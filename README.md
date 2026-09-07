@@ -1,5 +1,7 @@
 # OpenSignature
 
+[![CI/CD](https://github.com/serhatboyraz/opensignature/actions/workflows/ci.yml/badge.svg)](https://github.com/serhatboyraz/opensignature/actions/workflows/ci.yml)
+
 Independent .NET digital-signature platform with asynchronous signing, PostgreSQL metadata, RabbitMQ workers, and a React administration UI.
 
 Bağımsız .NET dijital imza platformu: asenkron imzalama, PostgreSQL meta veri, RabbitMQ işçileri ve React yönetim arayüzü.
@@ -205,6 +207,10 @@ USB tokens appear on the Providers page (`/providers`) when vendor PKCS#11 middl
 ```bash
 dotnet test OpenSignature.slnx
 ```
+
+CI on every pull request and `main` push: restore, build, test, web lint/build, and vulnerability audits (`.github/workflows/ci.yml`). Pushes to `main` also publish three images to GHCR (`api`, `worker`, `web`).
+
+Her çekme isteği ve `main` push’unda CI: restore, derleme, test, web lint/derleme ve zafiyet denetimleri. `main` ayrıca üç imajı GHCR’ye yayınlar (`api`, `worker`, `web`).
 
 ## Repository layout / Depo düzeni
 

@@ -49,4 +49,6 @@ Run:
 dotnet test OpenSignature.slnx
 ```
 
+CI (`.github/workflows/ci.yml`) runs the same `dotnet test` on pull requests and `main`, plus web lint/build. After those gates pass on `main`, Api, Worker, and Web images are published to GHCR.
+
 Full strategy: [engineering test strategy](engineering/test-strategy.md).

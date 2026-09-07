@@ -235,7 +235,7 @@ Never log private keys, passwords, PINs, secrets, or document contents. Prefer m
 | Area | Status |
 |------|--------|
 | Phase 0 (T001–T003) | **Done** — solution bootstrap (`OpenSignature.slnx`), engineering standards, `docker-compose.yml` (Postgres + RabbitMQ) |
-| Phase 14 (T141) | **Done** — Api/Worker/Web container images and full-stack Compose |
+| Phase 14 (T140–T141) | **Done** — CI/CD (build, test, GHCR Api/Worker/Web images) and full-stack Compose |
 | Domain / persistence | **WIP** — domain model and later Phase 1 tasks |
 | Signing / providers | **WIP** — contracts and engines not yet complete |
 | API async pipeline, outbox, worker | Outbox writer/processor + RabbitMQ publisher/worker skeleton in place; full API pipeline still planned |

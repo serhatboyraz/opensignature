@@ -45,4 +45,6 @@ API → depolama → PostgreSQL → outbox → RabbitMQ → işçi → sağlayı
 dotnet test OpenSignature.slnx
 ```
 
+CI (`.github/workflows/ci.yml`) çekme isteklerinde ve `main`’de aynı `dotnet test` ile web lint/derlemesini çalıştırır. `main`’de bu kapılar geçince Api, Worker ve Web imajları GHCR’ye yayınlanır.
+
 Tam strateji: [mühendislik test stratejisi](engineering/test-strategy.md).

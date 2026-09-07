@@ -132,10 +132,13 @@ dotnet test --filter "Category!=Slow"
 
 ### CI
 
-- Run `dotnet test` on every PR/main build (see CI task T140).
-- Fail the build on any failing test.
-- Prefer the same Testcontainers-based integration suite as local so results match.
+- Workflow: `.github/workflows/ci.yml` (task T140).
+- Run `dotnet test OpenSignature.slnx` on every PR and `main` build. Fail the job on any failing test.
+- Lint and build the React app (`npm run lint`, `npm run build`).
+- Audit NuGet (`dotnet list package --vulnerable`) and npm (`npm audit --audit-level=high`).
+- Prefer the same Testcontainers-based integration suite as local so results match. GitHub-hosted runners provide Docker.
 - Do not inject production secrets; use ephemeral containers and public/sample material only.
+- After the gates pass on `main`, publish Api, Worker, and Web images to GHCR (never bake secrets or PFX into images).
 - Keep the default CI gate green; mark genuinely slow suites so they can be filtered if needed, but do not skip required coverage for P0 paths.
 
 ## 6. Test data and certificates policy

@@ -1,5 +1,35 @@
 # Operations Guide
 
+## CI/CD
+
+GitHub Actions workflow: `.github/workflows/ci.yml`.
+
+| Trigger | What runs |
+| --- | --- |
+| Pull request | Restore, build, test, web lint/build, NuGet and npm vulnerability audits |
+| Push to `main` | The same gates, then three images published to GHCR |
+| `workflow_dispatch` on `main` | Same as a `main` push |
+
+Images (linux/amd64), tagged `latest` and `sha-<short-sha>`:
+
+```text
+ghcr.io/<owner>/<repo>/api
+ghcr.io/<owner>/<repo>/worker
+ghcr.io/<owner>/<repo>/web
+```
+
+For this repository:
+
+```bash
+docker pull ghcr.io/serhatboyraz/opensignature/api:latest
+docker pull ghcr.io/serhatboyraz/opensignature/worker:latest
+docker pull ghcr.io/serhatboyraz/opensignature/web:latest
+```
+
+Images are built from `docker/api/Dockerfile`, `docker/worker/Dockerfile`, and `docker/web/Dockerfile`. Secrets, PFX files, and document binaries are not baked into images. The first GHCR package created by `GITHUB_TOKEN` is private; set visibility to Public if anonymous pulls are required (each package → Package settings). The `org.opencontainers.image.source` label links packages back to this repository.
+
+USB / PKCS#11 tokens are not available in these images — run Api and Worker on the host for smart-card signing.
+
 ## Docker Compose (full stack)
 
 From the repository root:
