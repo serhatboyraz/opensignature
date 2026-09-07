@@ -7,6 +7,7 @@ using OpenSignature.Application.Messages;
 using OpenSignature.Domain.Enums;
 using OpenSignature.Infrastructure.Messaging;
 using RabbitMQ.Client;
+using RabbitMQ.Client.Events;
 using Testcontainers.RabbitMq;
 
 namespace OpenSignature.Infrastructure.Tests;
@@ -68,10 +69,24 @@ public sealed class RabbitMqSigningJobPublisherTests : IAsyncLifetime
             exchange: SigningQueueTopology.Exchange,
             routingKey: SigningQueueTopology.RoutingKey);
 
+        // Subscribe before publish so delivery cannot race a single BasicGet under CI load.
+        var delivered = new TaskCompletionSource<BasicDeliverEventArgs>(
+            TaskCreationOptions.RunContinuationsAsynchronously);
+        var consumer = new AsyncEventingBasicConsumer(channel);
+        consumer.ReceivedAsync += (_, args) =>
+        {
+            delivered.TrySetResult(args);
+            return Task.CompletedTask;
+        };
+        await channel.BasicConsumeAsync(exclusiveQueue, autoAck: true, consumer);
+
         await publisher.PublishAsync(message);
 
-        var result = await channel.BasicGetAsync(exclusiveQueue, autoAck: true);
-        Assert.NotNull(result);
+        BasicDeliverEventArgs result;
+        using (var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(15)))
+        {
+            result = await delivered.Task.WaitAsync(timeout.Token);
+        }
 
         var json = Encoding.UTF8.GetString(result.Body.ToArray());
         var restored = JsonSerializer.Deserialize<SigningJobMessage>(json, JsonOptions);

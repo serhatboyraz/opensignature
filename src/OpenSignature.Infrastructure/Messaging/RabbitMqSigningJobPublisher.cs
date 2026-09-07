@@ -125,8 +125,12 @@ public sealed class RabbitMqSigningJobPublisher : ISigningJobPublisher, IAsyncDi
                 .ConfigureAwait(false);
         }
 
+        var channelOptions = new CreateChannelOptions(
+            publisherConfirmationsEnabled: true,
+            publisherConfirmationTrackingEnabled: true);
+
         _channel = await _connection
-            .CreateChannelAsync(cancellationToken: cancellationToken)
+            .CreateChannelAsync(channelOptions, cancellationToken)
             .ConfigureAwait(false);
 
         await _channel.ExchangeDeclareAsync(
