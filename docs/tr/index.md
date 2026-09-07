@@ -41,3 +41,7 @@ flowchart LR
 ## Dil
 
 Bu site **English** ve **Türkçe** olarak sunulur (üst çubuktaki dil seçici). Kaynak kodu, tanımlayıcılar, loglar, testler ve commit mesajları yalnızca İngilizcedir.
+
+## Lisans
+
+OpenSignature [MIT Lisansı](https://github.com/serhatboyraz/opensignature/blob/main/LICENSE) altındadır.

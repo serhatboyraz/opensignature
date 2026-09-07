@@ -224,3 +224,9 @@ samples/
 POC path is operational: API → storage → PostgreSQL → outbox → RabbitMQ → worker → signing engine → download. USB-token PKCS#11 providers are registered from configuration (auto-detect in Development). Further work continues via `docs/TASKS.md`.
 
 POC yolu çalışır durumda: API → depolama → PostgreSQL → outbox → RabbitMQ → işçi → imza motoru → indirme. USB-token PKCS#11 sağlayıcıları yapılandırmadan kaydedilir (Development’ta otomatik algılama). Sonraki işler `docs/TASKS.md` üzerinden sürer.
+
+## License / Lisans
+
+OpenSignature is licensed under the [MIT License](LICENSE).
+
+OpenSignature [MIT Lisansı](LICENSE) altındadır.

@@ -41,3 +41,7 @@ flowchart LR
 ## Language
 
 This site is available in **English** and **Türkçe** (language switcher in the header). Source code, identifiers, logs, tests, and commit messages remain English-only.
+
+## License
+
+OpenSignature is licensed under the [MIT License](https://github.com/serhatboyraz/opensignature/blob/main/LICENSE).

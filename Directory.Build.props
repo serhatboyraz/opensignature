@@ -15,7 +15,8 @@
     <Company>OpenSignature</Company>
     <Product>OpenSignature</Product>
     <Authors>OpenSignature</Authors>
-    <Copyright>Copyright (c) OpenSignature</Copyright>
+    <Copyright>Copyright (c) 2026 OpenSignature contributors</Copyright>
+    <PackageLicenseExpression>MIT</PackageLicenseExpression>
     <NeutralLanguage>en</NeutralLanguage>
   </PropertyGroup>
 </Project>
